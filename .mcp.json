@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "practice-tools": {
+      "command": "python",
+      "args": ["mcp-agent/server.py"]
+    }
+  }
+}
