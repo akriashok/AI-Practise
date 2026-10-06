@@ -75,6 +75,15 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
 .hist li{border-top:1px solid var(--line);padding:10px 0;cursor:pointer}
 .hist .hq{font-weight:500}
 .hist .ha{font-size:.85rem;color:var(--muted)}
+.shot{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.shot.drag{border-color:var(--accent);background:var(--sunk)}
+#pasteBox{min-height:44px;border-radius:10px;background:var(--sunk);padding:11px 12px;color:var(--muted);font-size:.9rem;outline:none;overflow:hidden;-webkit-user-select:text;user-select:text}
+#pasteBox:focus{outline:2px solid var(--accent);outline-offset:1px}
+#pasteBox:empty::before{content:attr(data-ph)}
+#shotPrev{max-width:100%;max-height:220px;object-fit:contain;border-radius:8px;border:1px solid var(--line);align-self:flex-start}
+.codebox{display:flex;flex-direction:column;gap:6px;min-width:0}
+.codebox pre{margin:0;background:var(--sunk);border-radius:10px;padding:12px;overflow-x:auto;font:500 .82rem/1.5 var(--mono);white-space:pre}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 </head>
 <body>
@@ -98,6 +107,19 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
     <button class="btn" id="skipBtn">Ignore what I heard</button>
   </div>
   <p class="note" id="note" hidden></p>
+
+  <section class="shot" id="shotZone" aria-label="Screenshot question">
+    <span class="label">Screenshot question</span>
+    <div id="pasteBox" contenteditable="true" role="textbox" aria-label="Paste a screenshot here" data-ph="Paste a screenshot here (Ctrl+V / ⌘V, or press and hold → Paste)"></div>
+    <img id="shotPrev" hidden alt="Screenshot to answer">
+    <input id="shotNote" placeholder="Optional: e.g. solve in Java, explain only, pick the option">
+    <div class="row">
+      <label class="btn" for="shotFile">Choose image</label>
+      <input type="file" id="shotFile" accept="image/*" class="visually-hidden">
+      <button class="btn primary" id="shotGo" disabled>Answer from image</button>
+      <button class="btn" id="shotClear" hidden>Remove</button>
+    </div>
+  </section>
 
   <article class="answer" id="answer" aria-live="polite">
     <div class="answer-head"><span class="label">Say this</span><span class="tag" id="exTag">Example</span></div>
@@ -182,8 +204,12 @@ Education: B.Tech, CMRIT, 2017.</textarea>
   function render(text,question,isExample){
     $("asked").textContent=question?"Q: "+question:"";
     $("exTag").hidden=!isExample;
-    let open="",pts=[],story="",follow="",mode="";
-    for(const raw of text.split("\n")){const l=raw.trim().replace(/^\*\*|\*\*$/g,"");if(!l)continue;
+    let open="",pts=[],story="",follow="",mode="",code=[],inCode=false,lang="";
+    for(const raw of text.split("\n")){
+      if(inCode){if(/^\s*```/.test(raw)){inCode=false;mode=""}else code.push(raw);continue}
+      const l=raw.trim().replace(/^\*\*|\*\*$/g,"");if(!l)continue;
+      if(/^```/.test(l)){inCode=true;lang=l.slice(3).trim();mode="c";continue}
+      if(/^CODE:/i.test(l)){mode="c";continue}
       if(/^OPEN:/i.test(l)){open=l.replace(/^OPEN:\s*/i,"");mode="o"}
       else if(/^EXAMPLE:/i.test(l)){story=l.replace(/^EXAMPLE:\s*/i,"");mode="s"}
       else if(/^FOLLOW-?UP:/i.test(l)){follow=l.replace(/^FOLLOW-?UP:\s*/i,"");mode="f"}
@@ -193,6 +219,7 @@ Education: B.Tech, CMRIT, 2017.</textarea>
     const el=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e};
     if(open)out.append(el("p","open",open));
     if(pts.length){const ul=el("ul","points");pts.forEach(t=>{const li=el("li");li.append(el("span",null,t));ul.append(li)});out.append(ul)}
+    if(code.length){const d=el("div","codebox");const pre=el("pre");pre.append(el("code",null,code.join("\n")));d.append(el("span","label","Code"+(lang?" · "+lang:"")),pre);out.append(d)}
     if(story){const d=el("div","story");d.append(el("span","label","Example from your work"),el("p",null,story));out.append(d)}
     if(follow){const d=el("div","follow");d.append(el("span","label","Likely follow-up"),el("p",null,follow));out.append(d)}
   }
@@ -235,7 +262,26 @@ EXAMPLE: <2 sentences: a concrete story from the background, Situation-Task-Acti
 FOLLOWUP: <most likely follow-up question>`;
   }
 
-  async function answer(heard){
+  function imagePrompt(extra){
+    return `You are an interview assistant. The image is a screenshot from the candidate's laptop during a technical interview. It may show a coding problem, a SQL question, a multiple-choice question, a system design prompt, an error message, or a written question.
+${extra?"Candidate's instruction: "+extra+"\n":""}
+Read the image carefully, including any constraints and examples, then reply in exactly this format and nothing else:
+Q: <the question in the image, in one line>
+OPEN: <the direct answer or approach in one or two sentences; for a multiple-choice question, state the correct option first>
+- <key point: logic, edge case, or why it works>
+- <key point>
+- <for code: time and space complexity>
+CODE:
+\`\`\`<language>
+<complete, correct, runnable solution with brief comments; use the language shown in the image, otherwise Python, or SQL for database questions>
+\`\`\`
+FOLLOWUP: <most likely follow-up question>
+
+Leave out the CODE section entirely if the question needs no code.
+Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$("bg").value.trim().slice(0,1500)}`;
+  }
+
+  async function answer(heard,img){
     const key=$("key").value.trim();
     if(!key){showNote("Add your OpenRouter API key in Setup first.");$("setup").open=true;return}
     const id=++seq, ctl=new AbortController(); inflight.set(id,ctl);
@@ -246,7 +292,8 @@ FOLLOWUP: <most likely follow-up question>`;
     try{
       const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",signal:ctl.signal,
         headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
-        body:JSON.stringify({model:$("model").value.trim(),stream:true,temperature:0.4,max_tokens:500,messages:[{role:"user",content:prompt(heard)}]})});
+        body:JSON.stringify({model:$("model").value.trim(),stream:true,temperature:img?0.2:0.4,max_tokens:img?1800:500,
+          messages:[{role:"user",content:img?[{type:"text",text:imagePrompt(heard)},{type:"image_url",image_url:{url:img}}]:prompt(heard)}]})});
       if(!res.ok){let m="";try{m=(await res.json()).error?.message||""}catch(e){}throw new Error(res.status===401?"OpenRouter rejected the API key. Check it in Setup.":res.status===402?"Your OpenRouter credits ran out. Top up, then try again.":"OpenRouter error "+res.status+(m?": "+m:""))}
       const reader=res.body.getReader(), dec=new TextDecoder(); let buf="";
       for(;;){const {value,done}=await reader.read(); if(done)break; buf+=dec.decode(value,{stream:true});
@@ -256,11 +303,11 @@ FOLLOWUP: <most likely follow-up question>`;
             const clean=text.trim();
             if(/^SKIP/i.test(clean)){ctl.abort();break}
             if(!took&&clean.length>8&&id>=shownId)takeOver();
-            if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:heard,false)}
+            if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:(heard||"Screenshot"),false)}
           }}catch(e){}
         }
       }
-      if(took&&shownId===id){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():heard,a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
+      if(took&&shownId===id){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
     }catch(e){
       if(e.name!=="AbortError"){showNote(e.message||"Couldn't reach OpenRouter. Check your connection.")}
     }finally{
@@ -268,6 +315,37 @@ FOLLOWUP: <most likely follow-up question>`;
       if(inflight.size===0){$("answer").classList.remove("live");$("micState").textContent=listening?"Listening…":"Mic is off"}
     }
   }
+
+  // ---------- screenshot input (paste / drop / pick) ----------
+  let shot=null;
+  function loadImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file);const im=new Image();im.onload=()=>res(im);im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("bad image"))};im.src=u})}
+  async function shrink(file){
+    const im=await loadImg(file);const max=2000;const w=im.naturalWidth,h=im.naturalHeight;const s=Math.min(1,max/Math.max(w,h));
+    const c=document.createElement("canvas");c.width=Math.round(w*s);c.height=Math.round(h*s);
+    const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
+    URL.revokeObjectURL(im.src);return c.toDataURL("image/jpeg",0.88);
+  }
+  async function takeShot(file,autoSend){
+    if(!file||!/^image\//.test(file.type)){showNote("That isn't an image. Paste or choose a PNG or JPG screenshot.");return}
+    try{shot=await shrink(file)}catch(e){showNote("Couldn't read that image. Try another screenshot.");return}
+    $("shotPrev").src=shot;$("shotPrev").hidden=false;$("shotGo").disabled=false;$("shotClear").hidden=false;$("pasteBox").textContent="";showNote("");
+    if(autoSend)sendShot();
+  }
+  function sendShot(){if(!shot)return;answer($("shotNote").value.trim(),shot);scrollTo({top:$("answer").offsetTop-12,behavior:"smooth"})}
+  function clearShot(){shot=null;$("shotPrev").hidden=true;$("shotPrev").removeAttribute("src");$("shotGo").disabled=true;$("shotClear").hidden=true;$("shotFile").value=""}
+  $("shotGo").onclick=sendShot;$("shotClear").onclick=clearShot;
+  $("shotFile").onchange=e=>takeShot(e.target.files[0],true);
+  document.addEventListener("paste",e=>{
+    const items=[...(e.clipboardData?.items||[])];const it=items.find(i=>i.kind==="file"&&i.type.startsWith("image/"));
+    if(it){e.preventDefault();takeShot(it.getAsFile(),true)}
+    else if(e.target===$("pasteBox")){e.preventDefault();showNote("The clipboard has no image. Copy a screenshot first, then paste.")}
+  });
+  $("pasteBox").addEventListener("input",()=>{$("pasteBox").textContent=""});
+  const zone=$("shotZone");
+  ["dragenter","dragover"].forEach(t=>zone.addEventListener(t,e=>{e.preventDefault();zone.classList.add("drag")}));
+  ["dragleave","drop"].forEach(t=>zone.addEventListener(t,()=>zone.classList.remove("drag")));
+  zone.addEventListener("drop",e=>{e.preventDefault();const f=[...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith("image/"));if(f)takeShot(f,true)});
+  window.addEventListener("dragover",e=>e.preventDefault());window.addEventListener("drop",e=>e.preventDefault());
 
   // ---------- speech recognition ----------
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
