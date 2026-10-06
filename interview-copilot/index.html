@@ -86,6 +86,13 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
 .typed{display:flex;gap:8px;align-items:flex-end}
 .typed textarea{flex:1;min-width:0;resize:none}
 .typed .btn{padding:13px 18px}
+.pending{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;border-radius:12px;padding:12px 14px;background:var(--accent);color:var(--accent-ink);font:600 .92rem/1.35 var(--body);cursor:pointer}
+.pending span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.pending b{font:500 .7rem/1 var(--mono);text-transform:uppercase;letter-spacing:.08em;opacity:.85}
+.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.check input{width:20px;height:20px;flex:none;margin-top:2px;accent-color:var(--accent)}
+.check span{display:flex;flex-direction:column;gap:2px}
+#resumeStatus.ok{color:var(--accent)}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 </head>
@@ -129,6 +136,7 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
     </div>
   </section>
 
+  <button class="pending" id="pendingBar" type="button" hidden><b>New question</b><span id="pendingQ"></span><b>Tap to view</b></button>
   <article class="answer" id="answer" aria-live="polite">
     <div class="answer-head"><span class="label">Say this</span><span class="tag" id="exTag">Example</span></div>
     <p class="asked" id="asked"></p>
@@ -166,6 +174,35 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
         </select>
         <input id="model" value="google/gemini-3.8-flash" placeholder="provider/model-id from openrouter.ai/models" hidden>
       </div>
+      <div class="field">
+        <label class="label" for="shotModelPick">Screenshot model</label>
+        <select id="shotModelPick">
+          <option value="same">Same as answer model</option>
+          <optgroup label="Google">
+            <option value="google/gemini-3.8-flash">Gemini 3.8 Flash · fast, recommended</option>
+          </optgroup>
+          <optgroup label="OpenAI">
+            <option value="openai/gpt-6-luna">GPT-6 Luna · fastest, cheapest</option>
+            <option value="openai/gpt-6-luna-pro">GPT-6 Luna Pro · reasons first, slower</option>
+            <option value="~openai/gpt-terra-latest">GPT-5.6 Terra · always reasons, slower</option>
+            <option value="openai/gpt-6.1-sol">GPT-6.1 Sol · strong on coding</option>
+          </optgroup>
+          <optgroup label="Anthropic">
+            <option value="anthropic/claude-sonnet-5.5">Claude Sonnet 5.5 · recommended for code</option>
+          </optgroup>
+          <optgroup label="Others">
+            <option value="deepseek/deepseek-v4.1-flash">DeepSeek V4.1 Flash</option>
+            <option value="z-ai/glm-5.3-flashx">GLM 5.3 FlashX · very fast</option>
+          </optgroup>
+          <option value="custom">Custom model ID…</option>
+        </select>
+        <input id="shotModel" value="anthropic/claude-sonnet-5.5" placeholder="provider/model-id for screenshots" hidden>
+        <p class="small">Used only for screenshot questions, so voice answers stay fast.</p>
+      </div>
+      <label class="check" for="lockOn">
+        <input type="checkbox" id="lockOn" checked>
+        <span><strong>Answer lock</strong><span class="small">Keep the answer you're reading on screen. New spoken questions wait behind a "New question" bar.</span></span>
+      </label>
       <div class="two">
         <div class="field">
           <label class="label" for="lang">Accent</label>
@@ -182,6 +219,11 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
       </div>
       <div class="field">
         <label class="label" for="bg">Your background (answers only use what's here)</label>
+        <div class="row">
+          <label class="btn" for="resumeFile">Upload resume</label>
+          <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="visually-hidden">
+          <span class="small" id="resumeStatus">PDF, Word (.docx) or text</span>
+        </div>
         <textarea id="bg" rows="9">Senior Software Engineer at Carelon Global Solutions India (Elevance Health), Hyderabad, since Sept 2019, on the SPS provider-data platform.
 Skills: Python, Oracle SQL, PL/SQL, Informatica ETL, AWS, Snowflake, Snowflake Cortex, LangChain, LangGraph, RAG, MCP, OpenRouter.
 Projects:
@@ -213,15 +255,18 @@ Education: B.Tech, CMRIT, 2017.</textarea>
   const $=id=>document.getElementById(id);
   const out=$("out"), note=$("note");
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-  ["key","model","lang","pause","role","bg","jd"].forEach(id=>{const v=store.get("icl_"+id);if(v!==null)$(id).value=v;$(id).addEventListener("input",()=>{store.set("icl_"+id,$(id).value);syncLabel()});$(id).addEventListener("change",()=>{store.set("icl_"+id,$(id).value);if(id==="lang"&&listening){rec&&rec.abort()}})});
-  // Model picker: preset list plus a custom ID box
-  (function(){
-    const pick=$("modelPick"), box=$("model");
+  ["key","model","shotModel","lang","pause","role","bg","jd"].forEach(id=>{const v=store.get("icl_"+id);if(v!==null)$(id).value=v;$(id).addEventListener("input",()=>{store.set("icl_"+id,$(id).value);syncLabel()});$(id).addEventListener("change",()=>{store.set("icl_"+id,$(id).value);if(id==="lang"&&listening){rec&&rec.abort()}})});
+  // Model pickers: preset list plus a custom ID box
+  function picker(pickId,boxId){
+    const pick=$(pickId), box=$(boxId);
     const known=[...pick.options].map(o=>o.value);
-    const show=v=>{if(known.includes(v)&&v!=="custom"){pick.value=v;box.hidden=true}else{pick.value="custom";box.hidden=false}};
-    show(box.value.trim());
-    pick.addEventListener("change",()=>{if(pick.value==="custom"){box.hidden=false;box.focus()}else{box.value=pick.value;box.hidden=true;store.set("icl_model",box.value);syncLabel()}});
-  })();
+    const v=box.value.trim();
+    if(known.includes(v)&&v!=="custom"){pick.value=v;box.hidden=true}else{pick.value="custom";box.hidden=false}
+    pick.addEventListener("change",()=>{if(pick.value==="custom"){box.hidden=false;box.focus()}else{box.value=pick.value;box.hidden=true;store.set("icl_"+boxId,box.value);syncLabel()}});
+  }
+  picker("modelPick","model");picker("shotModelPick","shotModel");
+  { const v=store.get("icl_lockOn"); if(v!==null)$("lockOn").checked=v==="1"; $("lockOn").addEventListener("change",()=>store.set("icl_lockOn",$("lockOn").checked?"1":"0")); }
+  function shotModelId(){const v=$("shotModel").value.trim();return !v||v==="same"?$("model").value.trim():v}
   function syncLabel(){$("modelLabel").textContent=($("model").value.split("/")[1]||"").slice(0,22)}
   syncLabel();
   if(!$("key").value) $("setup").open=true;
@@ -332,18 +377,28 @@ Leave out the CODE section entirely if the question needs no code.
 Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$("bg").value.trim().slice(0,1500)}`;
   }
 
-  async function answer(heard,img,typed){
+  let shownReal=false, pending=null;
+  function showPendingBar(){const b=$("pendingBar");if(!pending){b.hidden=true;return}const qm=pending.text.match(/^Q:\s*(.*)/im);$("pendingQ").textContent=qm?qm[1]:pending.heard;b.hidden=false}
+  $("pendingBar").onclick=()=>{
+    if(!pending)return;const p=pending;pending=null;showPendingBar();
+    for(const [k,c] of inflight){if(k<p.id){c.abort();inflight.delete(k)}}
+    shownId=p.id;shownReal=true;const qm=p.text.match(/^Q:\s*(.*)/im);render(p.text.replace(/^Q:.*$/im,""),qm?qm[1]:p.heard,false);
+    scrollTo({top:$("answer").offsetTop-12,behavior:"smooth"});
+  };
+  async function answer(heard,img,typed,explicit){
     const key=$("key").value.trim();
     if(!key){showNote("Add your OpenRouter API key in Setup first.");$("setup").open=true;return}
     const id=++seq, ctl=new AbortController(); inflight.set(id,ctl);
     if(shownId===0||!inflight.has(shownId)){$("answer").classList.add("live")}
     $("micState").textContent=listening?"Thinking… (still listening)":"Thinking…";
     let text="", took=false;
-    const takeOver=()=>{took=true;shownId=id;for(const [k,c] of inflight){if(k<id){c.abort();inflight.delete(k)}}$("answer").classList.add("live");showNote("")};
+    const force=!!(img||typed||explicit);
+    const takeOver=()=>{took=true;shownId=id;shownReal=true;for(const [k,c] of inflight){if(k<id){c.abort();inflight.delete(k)}}if(pending&&pending.id<id){pending=null;showPendingBar()}$("answer").classList.add("live");showNote("")};
+    const queue=()=>{took=true;if(pending&&pending.id!==id){const c=inflight.get(pending.id);if(c){c.abort();inflight.delete(pending.id)}}pending={id,text:"",heard};showPendingBar()};
     try{
       const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",signal:ctl.signal,
         headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
-        body:JSON.stringify({model:$("model").value.trim(),stream:true,temperature:img?0.2:0.4,max_tokens:img?1800:typed?1200:500,
+        body:JSON.stringify({model:img?shotModelId():$("model").value.trim(),stream:true,temperature:img?0.2:0.4,max_tokens:img?1800:typed?1200:500,
           messages:[{role:"user",content:img?[{type:"text",text:imagePrompt(heard)},{type:"image_url",image_url:{url:img}}]:prompt(heard,typed)}]})});
       if(!res.ok){let m="";try{m=(await res.json()).error?.message||""}catch(e){}throw new Error(res.status===401?"OpenRouter rejected the API key. Check it in Setup.":res.status===402?"Your OpenRouter credits ran out. Top up, then try again.":"OpenRouter error "+res.status+(m?": "+m:""))}
       const reader=res.body.getReader(), dec=new TextDecoder(); let buf="";
@@ -353,12 +408,13 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
           try{const j=JSON.parse(d);const t=j.choices?.[0]?.delta?.content;if(t){text+=t;
             const clean=text.trim();
             if(/^SKIP/i.test(clean)){ctl.abort();break}
-            if(!took&&clean.length>8&&id>=shownId)takeOver();
+            if(!took&&clean.length>8){if(!force&&$("lockOn").checked&&shownReal)queue();else if(id>=shownId||force)takeOver()}
             if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:(heard||"Screenshot"),false)}
+            else if(pending&&pending.id===id){pending.text=clean;showPendingBar()}
           }}catch(e){}
         }
       }
-      if(took&&shownId===id){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
+      if(took&&(shownId===id||(pending&&pending.id===id))){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
     }catch(e){
       if(e.name!=="AbortError"){showNote(e.message||"Couldn't reach OpenRouter. Check your connection.")}
     }finally{
@@ -366,6 +422,48 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
       if(inflight.size===0){$("answer").classList.remove("live");$("micState").textContent=listening?"Listening…":"Mic is off"}
     }
   }
+
+  // ---------- resume upload ----------
+  function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector('script[src="'+src+'"]'))return res();const t=document.createElement("script");t.src=src;t.onload=res;t.onerror=()=>rej(new Error("load "+src));document.head.append(t)})}
+  async function pdfText(file){
+    await loadScript("vendor/pdf.min.js");
+    pdfjsLib.GlobalWorkerOptions.workerSrc="vendor/pdf.worker.min.js";
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let out=[];
+    for(let i=1;i<=Math.min(pdf.numPages,10);i++){const pg=await pdf.getPage(i);const c=await pg.getTextContent();let line="",lines=[],lastY=null;
+      for(const it of c.items){const y=Math.round(it.transform[5]);if(lastY!==null&&Math.abs(y-lastY)>3){lines.push(line);line=""}line+=(line&&!line.endsWith(" ")&&!it.str.startsWith(" ")?" ":"")+it.str;lastY=y}
+      lines.push(line);out.push(lines.join("\n"))}
+    return out.join("\n\n");
+  }
+  async function docxText(file){await loadScript("vendor/mammoth.browser.min.js");const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});return r.value}
+  async function condense(raw){
+    const key=$("key").value.trim();if(!key)return null;
+    const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
+      body:JSON.stringify({model:$("model").value.trim(),temperature:0.1,max_tokens:1400,messages:[{role:"user",content:`Turn this resume into a compact fact sheet that an interview assistant will use to answer questions as this person. Plain text, no markdown headings, under 2,500 characters.
+Keep EVERY number, metric, date, company, title, tool, and project name exactly as written. Do not add, infer, or embellish anything.
+Format: one line for current role and company with dates; one "Skills:" line; then "Projects:" with one line per project (name: what it is, the person's role, tools, results with numbers); then earlier roles; then education and certifications.
+
+Resume:
+${raw.slice(0,20000)}`}]})});
+    if(!res.ok)return null;const j=await res.json();return j.choices?.[0]?.message?.content?.trim()||null;
+  }
+  $("resumeFile").onchange=async e=>{
+    const f=e.target.files[0];if(!f)return;const st=$("resumeStatus");st.classList.remove("ok");st.textContent="Reading "+f.name+"…";
+    try{
+      let raw;const n=f.name.toLowerCase();
+      if(n.endsWith(".pdf")||f.type==="application/pdf")raw=await pdfText(f);
+      else if(n.endsWith(".docx"))raw=await docxText(f);
+      else if(n.endsWith(".doc")){st.textContent="Old .doc files aren't supported. Save it as .docx or PDF and try again.";return}
+      else raw=await f.text();
+      raw=raw.replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();
+      if(raw.length<80){st.textContent="Couldn't find text in that file. If it's a scanned PDF, upload a Word or text version.";return}
+      $("bg").value=raw;store.set("icl_bg",raw);
+      st.textContent="Resume loaded. Condensing it so answers stay fast…";
+      const short=await condense(raw).catch(()=>null);
+      if(short){$("bg").value=short;store.set("icl_bg",short);st.textContent="Resume added. Check the facts below and edit if needed.";st.classList.add("ok")}
+      else{st.textContent=$("key").value.trim()?"Resume added as full text. Condensing failed, so answers may be a little slower.":"Resume added as full text. Add your API key to condense it for faster answers.";st.classList.add("ok")}
+    }catch(err){st.textContent="Couldn't read that file. Try a PDF or .docx exported again."}
+    finally{e.target.value=""}
+  };
 
   // ---------- typed question ----------
   $("typedForm").addEventListener("submit",e=>{e.preventDefault();const t=$("typedQ").value.trim();if(!t){$("typedQ").focus();return}answer(t,null,true);$("typedQ").value="";$("typedQ").blur()});
@@ -406,12 +504,13 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   let rec=null, listening=false, finalBuf="", interim="", timer=null;
   function showTranscript(){const t=$("transcript");t.replaceChildren();const a=document.createElement("span");a.textContent=finalBuf;const b=document.createElement("span");b.className="interim";b.textContent=(finalBuf&&interim?" ":"")+interim;t.append(a,b)}
-  function fire(){
+  function fire(explicit){
     clearTimeout(timer);
     const heard=(finalBuf+" "+interim).replace(/\s+/g," ").trim();
     finalBuf="";interim="";showTranscript();
-    if(heard.split(" ").length<4)return;
-    answer(heard);
+    if(!explicit&&heard.split(" ").length<4)return;
+    if(!heard)return;
+    answer(heard,null,false,!!explicit);
   }
   function startRec(){
     rec=new SR(); rec.lang=$("lang").value; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
@@ -434,7 +533,7 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
     $("micBtn").classList.remove("on");$("micBtn").setAttribute("aria-label","Start listening");$("micState").textContent="Mic is off";
   }
   $("micBtn").onclick=()=>listening?stopListening():startListening();
-  $("answerNow").onclick=()=>{if((finalBuf+interim).trim())fire();else showNote("Nothing heard yet.")};
+  $("answerNow").onclick=()=>{if((finalBuf+interim).trim())fire(true);else showNote("Nothing heard yet.")};
   $("skipBtn").onclick=()=>{clearTimeout(timer);finalBuf="";interim="";showTranscript()};
 
   // Keep the screen awake
