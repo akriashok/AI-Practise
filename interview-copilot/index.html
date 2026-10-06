@@ -135,6 +135,22 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
     <div id="out"></div>
   </article>
 
+  <details id="memory">
+    <summary>Interview memory <span class="label" id="memCount">0 questions</span></summary>
+    <div class="panel">
+      <div class="field">
+        <label class="label" for="company">Company and round</label>
+        <input id="company" placeholder="e.g. Infosys, GenAI Engineer, technical round 2">
+      </div>
+      <div class="field">
+        <span class="label">What it remembers so far</span>
+        <p class="small" id="memSummary" style="white-space:pre-line"></p>
+      </div>
+      <div class="row"><button class="btn" id="memNew" type="button">Start new interview</button></div>
+      <p class="small">Saved on this phone. It keeps each question, the answer it suggested, and what it heard you actually say, so follow-ups stay consistent.</p>
+    </div>
+  </details>
+
   <details id="setup">
     <summary>Setup <span class="label">key · profile · mic</span></summary>
     <div class="panel">
@@ -229,7 +245,15 @@ Education: B.Tech, CMRIT, 2017.</textarea>
   function showNote(t){note.hidden=!t;note.textContent=t||""}
 
   // ---------- answer rendering ----------
-  let history=[];
+  let session=null;try{session=JSON.parse(store.get("icl_session")||"null")}catch(e){}
+  if(!session||!Array.isArray(session.turns))session={turns:[],summary:"",company:""};
+  let history=session.turns;
+  function saveSession(){store.set("icl_session",JSON.stringify(session))}
+  function openOf(a){return (a.match(/OPEN:\s*(.*)/i)||[,""])[1]}
+  function memoryBlock(){
+    const turns=history.slice(-6).map(h=>"Q: "+h.q+"\nSuggested answer: "+openOf(h.a)+(h.said&&h.said.length?"\nWhat the candidate actually said: "+h.said.join(" ").slice(-700):"")).join("\n\n");
+    return [session.company?"Interview: "+session.company:"",session.summary?"Running notes on this interview:\n"+session.summary:"",turns?"Most recent exchanges:\n"+turns:""].filter(Boolean).join("\n\n");
+  }
   function render(text,question,isExample){
     $("asked").textContent=question?"Q: "+question:"";
     $("exTag").hidden=!isExample;
@@ -267,14 +291,14 @@ FOLLOWUP: How did you evaluate whether the answers were accurate?`,"Walk me thro
   // ---------- LLM (OpenRouter, streaming) ----------
   let seq=0, shownId=0; const inflight=new Map();
   function prompt(heard,typed){
-    const recent=history.slice(-3).map(h=>"Q: "+h.q+"\nCandidate answered along the lines of: "+(h.a.match(/OPEN:\s*(.*)/i)||[,""])[1]).join("\n");
-    if(typed) return `You are a live interview assistant. The candidate typed this interview question and needs an answer they can say out loud in about 60 seconds: first person, natural spoken English. Use ONLY facts from the candidate background. Never invent employers, projects, tools or numbers; where a metric would help write [add metric: what]. For technical or system design questions, explain the concept correctly and tie it to the candidate's real projects where it fits. If the question needs code or SQL, add it in a CODE section with a fenced block.
+    const recent=memoryBlock();
+    if(typed) return `You are a live interview assistant. The candidate typed this interview question and needs an answer they can say out loud in about 60 seconds: first person, natural spoken English. Use ONLY facts from the candidate background. Never invent employers, projects, tools or numbers; where a metric would help write [add metric: what]. For technical or system design questions, explain the concept correctly and tie it to the candidate's real projects where it fits. Use the interview memory: stay consistent with what the candidate already said (same numbers, same project details), do not reuse a story already told unless the question follows up on it, and if the question is a follow-up (for example 'tell me more' or 'why did you choose that'), build on what the candidate actually said. If the question needs code or SQL, add it in a CODE section with a fenced block.
 
 Role: ${$("role").value.trim()||"not given"}
 Candidate background:
 ${$("bg").value.trim().slice(0,6000)}
 ${$("jd").value.trim()?"Job description:\n"+$("jd").value.trim().slice(0,5000):""}
-${recent?"Earlier in this interview:\n"+recent:""}
+${recent?"Interview memory:\n"+recent:""}
 
 Question: "${heard}"
 
@@ -293,13 +317,13 @@ FOLLOWUP: <most likely follow-up question>`;
     return `You are a live interview assistant. Below is speech transcribed from a phone microphone during a job interview. It may contain the interviewer's question, the candidate's own speech, filler, or transcription errors.
 
 Step 1: If the transcript does NOT contain a question or request from the interviewer (for example it is the candidate talking about their own work, small talk, or noise), reply with exactly: SKIP
-Step 2: Otherwise, write what the candidate can say out loud in about 60 seconds: first person, natural spoken English. Use ONLY facts from the candidate background. Never invent employers, projects, tools or numbers; where a metric would help write [add metric: what]. For technical or system design questions, explain the concept correctly and tie it to the candidate's real projects where it fits.
+Step 2: Otherwise, write what the candidate can say out loud in about 60 seconds: first person, natural spoken English. Use ONLY facts from the candidate background. Never invent employers, projects, tools or numbers; where a metric would help write [add metric: what]. For technical or system design questions, explain the concept correctly and tie it to the candidate's real projects where it fits. Use the interview memory: stay consistent with what the candidate already said (same numbers, same project details), do not reuse a story already told unless the question follows up on it, and if the question is a follow-up (for example 'tell me more' or 'why did you choose that'), build on what the candidate actually said.
 
 Role: ${$("role").value.trim()||"not given"}
 Candidate background:
 ${$("bg").value.trim().slice(0,6000)}
 ${$("jd").value.trim()?"Job description:\n"+$("jd").value.trim().slice(0,5000):""}
-${recent?"Earlier in this interview:\n"+recent:""}
+${recent?"Interview memory:\n"+recent:""}
 
 Transcript: "${heard}"
 
@@ -352,13 +376,13 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
           if(!line.startsWith("data:"))continue; const d=line.slice(5).trim(); if(d==="[DONE]")continue;
           try{const j=JSON.parse(d);const t=j.choices?.[0]?.delta?.content;if(t){text+=t;
             const clean=text.trim();
-            if(/^SKIP/i.test(clean)){ctl.abort();break}
+            if(/^SKIP/i.test(clean)){if(!img&&!typed&&history.length){const t=history[history.length-1];(t.said=t.said||[]).push(heard);if(t.said.length>15)t.said.shift();saveSession();renderMemory()}ctl.abort();break}
             if(!took&&clean.length>8&&id>=shownId)takeOver();
             if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:(heard||"Screenshot"),false)}
           }}catch(e){}
         }
       }
-      if(took&&shownId===id){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
+      if(took&&shownId===id){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();saveSession();renderHistory();renderMemory();maybeSummarize()}
     }catch(e){
       if(e.name!=="AbortError"){showNote(e.message||"Couldn't reach OpenRouter. Check your connection.")}
     }finally{
@@ -366,6 +390,44 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
       if(inflight.size===0){$("answer").classList.remove("live");$("micState").textContent=listening?"Listening…":"Mic is off"}
     }
   }
+
+  // ---------- interview memory ----------
+  let summarizing=false;
+  async function maybeSummarize(){
+    const key=$("key").value.trim();
+    if(summarizing||!key||history.length<2||history.length%2)return;
+    summarizing=true;
+    const log=history.slice(-8).map(h=>"Q: "+h.q+"\nSuggested: "+openOf(h.a)+(h.said&&h.said.length?"\nCandidate said: "+h.said.join(" ").slice(-500):"")).join("\n\n");
+    try{
+      const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
+        body:JSON.stringify({model:$("model").value.trim(),temperature:0.2,max_tokens:400,messages:[{role:"user",content:`Update the running notes for this job interview. Plain text, under 120 words, short lines under these four headings:
+Topics covered:
+Stories and projects already used:
+Facts and numbers the candidate stated:
+What the interviewer seems to care about:
+Only include what the log supports. No other text.
+
+Current notes:
+${session.summary||"(none yet)"}
+
+Recent log:
+${log}`}]})});
+      if(res.ok){const j=await res.json();const t=j.choices?.[0]?.message?.content?.trim();if(t){session.summary=t;saveSession();renderMemory()}}
+    }catch(e){}finally{summarizing=false}
+  }
+  function renderMemory(){
+    const n=history.length;$("memCount").textContent=n+(n===1?" question":" questions");
+    $("memSummary").textContent=session.summary||(n?"Questions so far:\n"+history.slice(-6).map(h=>"• "+h.q).join("\n"):"Nothing yet. It starts remembering with the first question.");
+  }
+  $("company").value=session.company||"";
+  $("company").addEventListener("input",()=>{session.company=$("company").value;saveSession()});
+  let armed=0;
+  $("memNew").onclick=()=>{
+    if(Date.now()-armed<3000){history.length=0;session.summary="";session.company="";$("company").value="";saveSession();renderHistory();renderMemory();armed=0;$("memNew").textContent="Start new interview";return}
+    armed=Date.now();$("memNew").textContent="Tap again to clear memory";
+    setTimeout(()=>{if(Date.now()-armed>=2900)$("memNew").textContent="Start new interview"},3000);
+  };
+  renderHistory();renderMemory();
 
   // ---------- typed question ----------
   $("typedForm").addEventListener("submit",e=>{e.preventDefault();const t=$("typedQ").value.trim();if(!t){$("typedQ").focus();return}answer(t,null,true);$("typedQ").value="";$("typedQ").blur()});
