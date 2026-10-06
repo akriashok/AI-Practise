@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#16687f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Copilot">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
 <title>Interview Copilot Live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -278,13 +284,14 @@ FOLLOWUP: <most likely follow-up question>`;
     rec=new SR(); rec.lang=$("lang").value; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
     rec.onresult=e=>{interim="";for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalBuf+=(finalBuf?" ":"")+r[0].transcript.trim();else interim+=r[0].transcript}
       showTranscript();clearTimeout(timer);timer=setTimeout(fire,+$("pause").value)};
-    rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){stopListening();showNote("Microphone access was blocked. Allow the mic for this site in Chrome's site settings, then tap the mic again.")}
+    rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){stopListening();showNote(isIOS?"Microphone or speech access was blocked. In Settings → Safari → Microphone choose Ask or Allow, make sure Siri & Dictation is enabled, then tap the mic again.":"Microphone access was blocked. Allow the mic for this site in Chrome's site settings, then tap the mic again.")}
       else if(e.error==="network"){showNote("Speech recognition needs an internet connection.")}};
-    rec.onend=()=>{if(listening){setTimeout(()=>{if(listening){try{startRec()}catch(e){}}},150)}};
+    rec.onend=()=>{if(listening){setTimeout(()=>{if(listening){try{startRec()}catch(e){$("micState").textContent="Paused. Tap the mic to resume";listening=false;$("micBtn").classList.remove("on")}}},150)}};
     rec.start();
   }
+  const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
   function startListening(){
-    if(!SR){showNote("This browser can't transcribe speech. Open the page in Chrome on Android, or Safari on iPhone.");return}
+    if(!SR){showNote(isIOS?"Speech recognition isn't available here. Open the link in Safari, and check Settings → General → Keyboard → Enable Dictation is on.":"This browser can't transcribe speech. Open the page in Chrome on Android, or Safari on iPhone.");return}
     listening=true;showNote("");$("micBtn").classList.add("on");$("micBtn").setAttribute("aria-label","Stop listening");$("micState").textContent="Listening…";
     try{startRec()}catch(e){}
     wake();
