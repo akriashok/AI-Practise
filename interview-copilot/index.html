@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#16687f">
+<title>Interview Copilot Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: phone column — mic bar, live transcript, answer card, setup + history fold away */
+:root{
+  --bg:#eef2f4; --surface:#ffffff; --sunk:#e3e9ec; --fg:#14212b; --muted:#5a6b77; --line:#d3dce1;
+  --accent:#16687f; --accent-ink:#ffffff; --live:#c2412d; --mark:#f2c14e; --mark-ink:#3a2a00;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f171d; --surface:#17222a; --sunk:#1e2b34; --fg:#e6eef2; --muted:#93a6b2; --line:#2a3a45;
+  --accent:#4fb3cf; --accent-ink:#06222b; --live:#ff7a62; --mark:#e9b949; --mark-ink:#2b1f00; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);padding-inline:16px;padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(40px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font:700 1.35rem/1.1 var(--display);margin:0}
+.label{font:500 .7rem/1 var(--mono);text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.mic{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+#micBtn{width:64px;height:64px;flex:none;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;display:grid;place-items:center}
+#micBtn.on{background:var(--live)}
+#micBtn svg{width:28px;height:28px}
+@media (prefers-reduced-motion:no-preference){#micBtn.on{animation:pulse 1.6s ease-in-out infinite}@keyframes pulse{50%{box-shadow:0 0 0 10px color-mix(in srgb,var(--live) 18%,transparent)}}}
+.micText{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
+#micState{font-weight:600}
+#transcript{font-size:.92rem;color:var(--fg);min-height:1.4em;overflow-wrap:anywhere}
+#transcript .interim{color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{font:600 .88rem/1 var(--body);border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:10px;padding:11px 13px;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:focus-visible,#micBtn:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.answer{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.answer.live{border-color:var(--accent)}
+.answer-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{font:500 .68rem/1 var(--mono);text-transform:uppercase;letter-spacing:.08em;background:var(--mark);color:var(--mark-ink);padding:5px 7px;border-radius:5px}
+.asked{font-size:.88rem;color:var(--muted);margin:0}
+.open{font:600 1.25rem/1.35 var(--display);margin:0;text-wrap:balance}
+.points{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.points li{display:grid;grid-template-columns:18px 1fr;gap:6px;font-size:1.02rem;line-height:1.4}
+.points li::before{content:"";width:8px;height:8px;margin-top:.5em;border-radius:2px;background:var(--accent)}
+.story{background:var(--sunk);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.story p,.follow p{margin:0}
+.follow{display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--line);padding-top:12px;color:var(--accent);font-weight:500}
+.thinking{color:var(--muted);font-style:italic;margin:0}
+.note{font-size:.86rem;color:var(--live);margin:0}
+details{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+summary{cursor:pointer;padding:13px 14px;font-weight:600;display:flex;justify-content:space-between;gap:8px;list-style:none}
+summary::-webkit-details-marker{display:none}
+.panel{padding:0 14px 14px;display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:6px}
+textarea,input,select{width:100%;font:inherit;color:var(--fg);background:var(--sunk);border:1px solid transparent;border-radius:10px;padding:10px 12px}
+textarea{resize:vertical}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two>*{min-width:0}
+.small{font-size:.8rem;color:var(--muted);margin:0}
+.hist{list-style:none;margin:0;padding:0}
+.hist li{border-top:1px solid var(--line);padding:10px 0;cursor:pointer}
+.hist .hq{font-weight:500}
+.hist .ha{font-size:.85rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Interview Copilot</h1>
+    <span class="label" id="modelLabel"></span>
+  </header>
+
+  <section class="mic" aria-label="Microphone">
+    <button id="micBtn" aria-label="Start listening">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+    </button>
+    <div class="micText">
+      <span id="micState">Tap the mic to start listening</span>
+      <div id="transcript" aria-live="polite"></div>
+    </div>
+  </section>
+  <div class="row">
+    <button class="btn primary" id="answerNow">Answer now</button>
+    <button class="btn" id="skipBtn">Ignore what I heard</button>
+  </div>
+  <p class="note" id="note" hidden></p>
+
+  <article class="answer" id="answer" aria-live="polite">
+    <div class="answer-head"><span class="label">Say this</span><span class="tag" id="exTag">Example</span></div>
+    <p class="asked" id="asked"></p>
+    <div id="out"></div>
+  </article>
+
+  <details id="setup">
+    <summary>Setup <span class="label">key · profile · mic</span></summary>
+    <div class="panel">
+      <div class="field">
+        <label class="label" for="key">OpenRouter API key</label>
+        <input id="key" type="password" autocomplete="off" placeholder="sk-or-...">
+        <p class="small">Saved only in this browser on this phone.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="model">Model</label>
+        <input id="model" list="models" value="google/gemini-3.8-flash">
+        <datalist id="models">
+          <option value="google/gemini-3.8-flash"></option>
+          <option value="openai/gpt-6-luna"></option>
+          <option value="deepseek/deepseek-v4.1-flash"></option>
+          <option value="z-ai/glm-5.3-flashx"></option>
+        </datalist>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label class="label" for="lang">Accent</label>
+          <select id="lang"><option value="en-IN">English (India)</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option></select>
+        </div>
+        <div class="field">
+          <label class="label" for="pause">Answer after a pause of</label>
+          <select id="pause"><option value="900">0.9 s (fastest)</option><option value="1300" selected>1.3 s</option><option value="2000">2 s</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="role">Role you're interviewing for</label>
+        <input id="role" value="GenAI / AI Engineer">
+      </div>
+      <div class="field">
+        <label class="label" for="bg">Your background (answers only use what's here)</label>
+        <textarea id="bg" rows="9">Senior Software Engineer at Carelon Global Solutions India (Elevance Health), Hyderabad, since Sept 2019, on the SPS provider-data platform.
+Skills: Python, Oracle SQL, PL/SQL, Informatica ETL, AWS, Snowflake, Snowflake Cortex, LangChain, LangGraph, RAG, MCP, OpenRouter.
+Projects:
+- AIDA: LangGraph multi-agent AI assistant on Snowflake Cortex.
+- SPS RAG Q&A chatbot over provider-data documentation.
+- DART: bulk-update ETL tool.
+- AEDL: Oracle to Snowflake migration.
+- EDL Balance & Control automation.
+- CPF data migration.
+- iCEDQ test automation.
+Earlier: Network / Telecom Engineer at Zonta Technologies (2017), led a technician team on corporate Wi-Fi deployments.
+Education: B.Tech, CMRIT, 2017.</textarea>
+      </div>
+      <div class="field">
+        <label class="label" for="jd">Job description (optional)</label>
+        <textarea id="jd" rows="4" placeholder="Paste the job description to tailor answers"></textarea>
+      </div>
+    </div>
+  </details>
+
+  <details id="history">
+    <summary>This session <span class="label" id="histCount">0</span></summary>
+    <div class="panel"><ul class="hist" id="histList"></ul></div>
+  </details>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const out=$("out"), note=$("note");
+  const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+  ["key","model","lang","pause","role","bg","jd"].forEach(id=>{const v=store.get("icl_"+id);if(v!==null)$(id).value=v;$(id).addEventListener("input",()=>{store.set("icl_"+id,$(id).value);syncLabel()});$(id).addEventListener("change",()=>{store.set("icl_"+id,$(id).value);if(id==="lang"&&listening){rec&&rec.abort()}})});
+  function syncLabel(){$("modelLabel").textContent=($("model").value.split("/")[1]||"").slice(0,22)}
+  syncLabel();
+  if(!$("key").value) $("setup").open=true;
+
+  function showNote(t){note.hidden=!t;note.textContent=t||""}
+
+  // ---------- answer rendering ----------
+  let history=[];
+  function render(text,question,isExample){
+    $("asked").textContent=question?"Q: "+question:"";
+    $("exTag").hidden=!isExample;
+    let open="",pts=[],story="",follow="",mode="";
+    for(const raw of text.split("\n")){const l=raw.trim().replace(/^\*\*|\*\*$/g,"");if(!l)continue;
+      if(/^OPEN:/i.test(l)){open=l.replace(/^OPEN:\s*/i,"");mode="o"}
+      else if(/^EXAMPLE:/i.test(l)){story=l.replace(/^EXAMPLE:\s*/i,"");mode="s"}
+      else if(/^FOLLOW-?UP:/i.test(l)){follow=l.replace(/^FOLLOW-?UP:\s*/i,"");mode="f"}
+      else if(/^[-•*]\s+/.test(l)){pts.push(l.replace(/^[-•*]\s+/,""));mode="p"}
+      else if(mode==="s")story+=" "+l; else if(mode==="o")open+=" "+l; else if(mode==="f")follow+=" "+l; else if(!open)open=l;}
+    out.replaceChildren();
+    const el=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e};
+    if(open)out.append(el("p","open",open));
+    if(pts.length){const ul=el("ul","points");pts.forEach(t=>{const li=el("li");li.append(el("span",null,t));ul.append(li)});out.append(ul)}
+    if(story){const d=el("div","story");d.append(el("span","label","Example from your work"),el("p",null,story));out.append(d)}
+    if(follow){const d=el("div","follow");d.append(el("span","label","Likely follow-up"),el("p",null,follow));out.append(d)}
+  }
+  render(`OPEN: I built a RAG Q&A chatbot at Carelon that lets analysts ask plain-English questions about our SPS provider-data platform and get answers grounded in our own documentation.
+- Ingested platform docs, chunked by section, and stored embeddings for retrieval
+- Passed the top matching chunks to the LLM with strict grounding instructions
+- Returned answers with source sections so users could verify them
+EXAMPLE: Analysts kept asking engineers basic provider-data questions. I built the retrieval pipeline and prompt, tested it on real questions, and it became the first stop before raising tickets [add metric: tickets or time saved].
+FOLLOWUP: How did you evaluate whether the answers were accurate?`,"Walk me through a RAG system you've built.",true);
+
+  function renderHistory(){
+    const ul=$("histList");ul.replaceChildren();$("histCount").textContent=history.length;
+    history.slice().reverse().forEach(h=>{const li=document.createElement("li");const a=document.createElement("div");a.className="hq";a.textContent=h.q;const b=document.createElement("div");b.className="ha";b.textContent=(h.a.match(/OPEN:\s*(.*)/i)||[,""])[1];li.append(a,b);li.onclick=()=>{render(h.a,h.q,false);scrollTo({top:0,behavior:"smooth"})};ul.append(li)});
+  }
+
+  // ---------- LLM (OpenRouter, streaming) ----------
+  let seq=0, shownId=0; const inflight=new Map();
+  function prompt(heard){
+    const recent=history.slice(-3).map(h=>"Q: "+h.q+"\nCandidate answered along the lines of: "+(h.a.match(/OPEN:\s*(.*)/i)||[,""])[1]).join("\n");
+    return `You are a live interview assistant. Below is speech transcribed from a phone microphone during a job interview. It may contain the interviewer's question, the candidate's own speech, filler, or transcription errors.
+
+Step 1: If the transcript does NOT contain a question or request from the interviewer (for example it is the candidate talking about their own work, small talk, or noise), reply with exactly: SKIP
+Step 2: Otherwise, write what the candidate can say out loud in about 60 seconds: first person, natural spoken English. Use ONLY facts from the candidate background. Never invent employers, projects, tools or numbers; where a metric would help write [add metric: what]. For technical or system design questions, explain the concept correctly and tie it to the candidate's real projects where it fits.
+
+Role: ${$("role").value.trim()||"not given"}
+Candidate background:
+${$("bg").value.trim().slice(0,6000)}
+${$("jd").value.trim()?"Job description:\n"+$("jd").value.trim().slice(0,5000):""}
+${recent?"Earlier in this interview:\n"+recent:""}
+
+Transcript: "${heard}"
+
+Reply in exactly this plain-text format, no markdown, nothing else:
+Q: <the interviewer's question, cleaned up>
+OPEN: <one or two sentences that directly answer it>
+- <talking point, at most 14 words>
+- <talking point>
+- <talking point>
+EXAMPLE: <2 sentences: a concrete story from the background, Situation-Task-Action-Result>
+FOLLOWUP: <most likely follow-up question>`;
+  }
+
+  async function answer(heard){
+    const key=$("key").value.trim();
+    if(!key){showNote("Add your OpenRouter API key in Setup first.");$("setup").open=true;return}
+    const id=++seq, ctl=new AbortController(); inflight.set(id,ctl);
+    if(shownId===0||!inflight.has(shownId)){$("answer").classList.add("live")}
+    $("micState").textContent=listening?"Thinking… (still listening)":"Thinking…";
+    let text="", took=false;
+    const takeOver=()=>{took=true;shownId=id;for(const [k,c] of inflight){if(k<id){c.abort();inflight.delete(k)}}$("answer").classList.add("live");showNote("")};
+    try{
+      const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",signal:ctl.signal,
+        headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
+        body:JSON.stringify({model:$("model").value.trim(),stream:true,temperature:0.4,max_tokens:500,messages:[{role:"user",content:prompt(heard)}]})});
+      if(!res.ok){let m="";try{m=(await res.json()).error?.message||""}catch(e){}throw new Error(res.status===401?"OpenRouter rejected the API key. Check it in Setup.":res.status===402?"Your OpenRouter credits ran out. Top up, then try again.":"OpenRouter error "+res.status+(m?": "+m:""))}
+      const reader=res.body.getReader(), dec=new TextDecoder(); let buf="";
+      for(;;){const {value,done}=await reader.read(); if(done)break; buf+=dec.decode(value,{stream:true});
+        let i; while((i=buf.indexOf("\n"))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+          if(!line.startsWith("data:"))continue; const d=line.slice(5).trim(); if(d==="[DONE]")continue;
+          try{const j=JSON.parse(d);const t=j.choices?.[0]?.delta?.content;if(t){text+=t;
+            const clean=text.trim();
+            if(/^SKIP/i.test(clean)){ctl.abort();break}
+            if(!took&&clean.length>8&&id>=shownId)takeOver();
+            if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:heard,false)}
+          }}catch(e){}
+        }
+      }
+      if(took&&shownId===id){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():heard,a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
+    }catch(e){
+      if(e.name!=="AbortError"){showNote(e.message||"Couldn't reach OpenRouter. Check your connection.")}
+    }finally{
+      inflight.delete(id);
+      if(inflight.size===0){$("answer").classList.remove("live");$("micState").textContent=listening?"Listening…":"Mic is off"}
+    }
+  }
+
+  // ---------- speech recognition ----------
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let rec=null, listening=false, finalBuf="", interim="", timer=null;
+  function showTranscript(){const t=$("transcript");t.replaceChildren();const a=document.createElement("span");a.textContent=finalBuf;const b=document.createElement("span");b.className="interim";b.textContent=(finalBuf&&interim?" ":"")+interim;t.append(a,b)}
+  function fire(){
+    clearTimeout(timer);
+    const heard=(finalBuf+" "+interim).replace(/\s+/g," ").trim();
+    finalBuf="";interim="";showTranscript();
+    if(heard.split(" ").length<4)return;
+    answer(heard);
+  }
+  function startRec(){
+    rec=new SR(); rec.lang=$("lang").value; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
+    rec.onresult=e=>{interim="";for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalBuf+=(finalBuf?" ":"")+r[0].transcript.trim();else interim+=r[0].transcript}
+      showTranscript();clearTimeout(timer);timer=setTimeout(fire,+$("pause").value)};
+    rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){stopListening();showNote("Microphone access was blocked. Allow the mic for this site in Chrome's site settings, then tap the mic again.")}
+      else if(e.error==="network"){showNote("Speech recognition needs an internet connection.")}};
+    rec.onend=()=>{if(listening){setTimeout(()=>{if(listening){try{startRec()}catch(e){}}},150)}};
+    rec.start();
+  }
+  function startListening(){
+    if(!SR){showNote("This browser can't transcribe speech. Open the page in Chrome on Android, or Safari on iPhone.");return}
+    listening=true;showNote("");$("micBtn").classList.add("on");$("micBtn").setAttribute("aria-label","Stop listening");$("micState").textContent="Listening…";
+    try{startRec()}catch(e){}
+    wake();
+  }
+  function stopListening(){
+    listening=false;clearTimeout(timer);try{rec&&rec.abort()}catch(e){}
+    $("micBtn").classList.remove("on");$("micBtn").setAttribute("aria-label","Start listening");$("micState").textContent="Mic is off";
+  }
+  $("micBtn").onclick=()=>listening?stopListening():startListening();
+  $("answerNow").onclick=()=>{if((finalBuf+interim).trim())fire();else showNote("Nothing heard yet.")};
+  $("skipBtn").onclick=()=>{clearTimeout(timer);finalBuf="";interim="";showTranscript()};
+
+  // Keep the screen awake
+  let lock=null;async function wake(){try{if("wakeLock" in navigator&&!lock){lock=await navigator.wakeLock.request("screen");lock.addEventListener("release",()=>lock=null)}}catch(e){}}
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&listening){wake();if(rec){try{rec.start()}catch(e){}}}});
+})();
+</script>
+</body>
+</html>
