@@ -145,13 +145,26 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
       </div>
       <div class="field">
         <label class="label" for="model">Model</label>
-        <input id="model" list="models" value="google/gemini-3.8-flash">
-        <datalist id="models">
-          <option value="google/gemini-3.8-flash"></option>
-          <option value="openai/gpt-6-luna"></option>
-          <option value="deepseek/deepseek-v4.1-flash"></option>
-          <option value="z-ai/glm-5.3-flashx"></option>
-        </datalist>
+        <select id="modelPick" aria-label="Model">
+          <optgroup label="Google">
+            <option value="google/gemini-3.8-flash">Gemini 3.8 Flash · fast, recommended</option>
+          </optgroup>
+          <optgroup label="OpenAI">
+            <option value="openai/gpt-6-luna">GPT-6 Luna · fastest, cheapest</option>
+            <option value="openai/gpt-6-luna-pro">GPT-6 Luna Pro · reasons first, slower</option>
+            <option value="~openai/gpt-terra-latest">GPT-5.6 Terra · always reasons, slower</option>
+            <option value="openai/gpt-6.1-sol">GPT-6.1 Sol · strong on coding</option>
+          </optgroup>
+          <optgroup label="Anthropic">
+            <option value="anthropic/claude-sonnet-5.5">Claude Sonnet 5.5 · strong on coding</option>
+          </optgroup>
+          <optgroup label="Others">
+            <option value="deepseek/deepseek-v4.1-flash">DeepSeek V4.1 Flash</option>
+            <option value="z-ai/glm-5.3-flashx">GLM 5.3 FlashX · very fast</option>
+          </optgroup>
+          <option value="custom">Custom model ID…</option>
+        </select>
+        <input id="model" value="google/gemini-3.8-flash" placeholder="provider/model-id from openrouter.ai/models" hidden>
       </div>
       <div class="two">
         <div class="field">
@@ -201,6 +214,14 @@ Education: B.Tech, CMRIT, 2017.</textarea>
   const out=$("out"), note=$("note");
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
   ["key","model","lang","pause","role","bg","jd"].forEach(id=>{const v=store.get("icl_"+id);if(v!==null)$(id).value=v;$(id).addEventListener("input",()=>{store.set("icl_"+id,$(id).value);syncLabel()});$(id).addEventListener("change",()=>{store.set("icl_"+id,$(id).value);if(id==="lang"&&listening){rec&&rec.abort()}})});
+  // Model picker: preset list plus a custom ID box
+  (function(){
+    const pick=$("modelPick"), box=$("model");
+    const known=[...pick.options].map(o=>o.value);
+    const show=v=>{if(known.includes(v)&&v!=="custom"){pick.value=v;box.hidden=true}else{pick.value="custom";box.hidden=false}};
+    show(box.value.trim());
+    pick.addEventListener("change",()=>{if(pick.value==="custom"){box.hidden=false;box.focus()}else{box.value=pick.value;box.hidden=true;store.set("icl_model",box.value);syncLabel()}});
+  })();
   function syncLabel(){$("modelLabel").textContent=($("model").value.split("/")[1]||"").slice(0,22)}
   syncLabel();
   if(!$("key").value) $("setup").open=true;
