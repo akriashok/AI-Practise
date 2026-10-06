@@ -238,6 +238,25 @@ Earlier: Network / Telecom Engineer at Zonta Technologies (2017), led a technici
 Education: B.Tech, CMRIT, 2017.</textarea>
       </div>
       <div class="field">
+        <label class="label" for="projects">Project details (what you did, tech used, results)</label>
+        <div class="row">
+          <label class="btn" for="projFile">Load .md or .txt</label>
+          <input type="file" id="projFile" accept=".md,.txt,text/plain,text/markdown" class="visually-hidden">
+          <span class="small" id="projStatus"></span>
+        </div>
+        <textarea id="projects" rows="10" placeholder="## Project name
+- What it is: one line
+- My role: what I personally built or owned
+- Tech: Python, LangGraph, Snowflake Cortex, ...
+- How it works: 2-3 key steps
+- Challenges: one hard problem and how I solved it
+- Results: numbers (time saved, users, accuracy)
+
+## Next project
+..."></textarea>
+        <p class="small" id="projCount"></p>
+      </div>
+      <div class="field">
         <label class="label" for="jd">Job description (optional)</label>
         <textarea id="jd" rows="4" placeholder="Paste the job description to tailor answers"></textarea>
       </div>
@@ -255,7 +274,7 @@ Education: B.Tech, CMRIT, 2017.</textarea>
   const $=id=>document.getElementById(id);
   const out=$("out"), note=$("note");
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-  ["key","model","shotModel","lang","pause","role","bg","jd"].forEach(id=>{const v=store.get("icl_"+id);if(v!==null)$(id).value=v;$(id).addEventListener("input",()=>{store.set("icl_"+id,$(id).value);syncLabel()});$(id).addEventListener("change",()=>{store.set("icl_"+id,$(id).value);if(id==="lang"&&listening){rec&&rec.abort()}})});
+  ["key","model","shotModel","lang","pause","role","bg","projects","jd"].forEach(id=>{const v=store.get("icl_"+id);if(v!==null)$(id).value=v;$(id).addEventListener("input",()=>{store.set("icl_"+id,$(id).value);syncLabel()});$(id).addEventListener("change",()=>{store.set("icl_"+id,$(id).value);if(id==="lang"&&listening){rec&&rec.abort()}})});
   // Model pickers: preset list plus a custom ID box
   function picker(pickId,boxId){
     const pick=$(pickId), box=$(boxId);
@@ -318,6 +337,7 @@ FOLLOWUP: How did you evaluate whether the answers were accurate?`,"Walk me thro
 Role: ${$("role").value.trim()||"not given"}
 Candidate background:
 ${$("bg").value.trim().slice(0,6000)}
+${$("projects").value.trim()?"Candidate project details (use these for project, design and how-did-you questions):\n"+$("projects").value.trim().slice(0,8000):""}
 ${$("jd").value.trim()?"Job description:\n"+$("jd").value.trim().slice(0,5000):""}
 ${recent?"Earlier in this interview:\n"+recent:""}
 
@@ -343,6 +363,7 @@ Step 2: Otherwise, write what the candidate can say out loud in about 60 seconds
 Role: ${$("role").value.trim()||"not given"}
 Candidate background:
 ${$("bg").value.trim().slice(0,6000)}
+${$("projects").value.trim()?"Candidate project details (use these for project, design and how-did-you questions):\n"+$("projects").value.trim().slice(0,8000):""}
 ${$("jd").value.trim()?"Job description:\n"+$("jd").value.trim().slice(0,5000):""}
 ${recent?"Earlier in this interview:\n"+recent:""}
 
@@ -374,7 +395,7 @@ CODE:
 FOLLOWUP: <most likely follow-up question>
 
 Leave out the CODE section entirely if the question needs no code.
-Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$("bg").value.trim().slice(0,1500)}`;
+Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$("bg").value.trim().slice(0,1500)}${$("projects").value.trim()?"; projects: "+$("projects").value.trim().slice(0,2500):""}`;
   }
 
   let shownReal=false, pending=null;
@@ -464,6 +485,11 @@ ${raw.slice(0,20000)}`}]})});
     }catch(err){st.textContent="Couldn't read that file. Try a PDF or .docx exported again."}
     finally{e.target.value=""}
   };
+
+  // ---------- project details ----------
+  function projCount(){const n=$("projects").value.length;$("projCount").textContent=n?n.toLocaleString()+" characters"+(n>8000?" · only the first 8,000 are used, trim it for faster answers":""):"";}
+  $("projects").addEventListener("input",projCount);projCount();
+  $("projFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const t=(await f.text()).trim();$("projects").value=t;store.set("icl_projects",t);projCount();$("projStatus").textContent="Loaded "+f.name}catch(err){$("projStatus").textContent="Couldn't read that file."}finally{e.target.value=""}};
 
   // ---------- typed question ----------
   $("typedForm").addEventListener("submit",e=>{e.preventDefault();const t=$("typedQ").value.trim();if(!t){$("typedQ").focus();return}answer(t,null,true);$("typedQ").value="";$("typedQ").blur()});
