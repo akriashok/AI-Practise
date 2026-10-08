@@ -93,6 +93,19 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
 .check input{width:20px;height:20px;flex:none;margin-top:2px;accent-color:var(--accent)}
 .check span{display:flex;flex-direction:column;gap:2px}
 #resumeStatus.ok{color:var(--accent)}
+.snip{background:var(--surface);border:2px solid var(--mark);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.snip-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.snip-head h2{font:600 1.05rem/1.3 var(--display);margin:0;flex:1;min-width:0}
+.snip pre{margin:0;background:var(--sunk);border-radius:10px;padding:12px;overflow:auto;max-height:60vh;font:500 .8rem/1.5 var(--mono);white-space:pre}
+.btn.sm{padding:8px 10px;font-size:.8rem}
+.finder{display:flex;flex-direction:column;gap:6px}
+.finder ul,.libList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.finder li button{all:unset;cursor:pointer;display:block;padding:9px 2px;border-top:1px solid var(--line);font-weight:500;width:100%}
+.libList li{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:9px 0}
+.libList li span{flex:1;min-width:0;font-weight:500;overflow-wrap:anywhere}
+.libForm{display:flex;flex-direction:column;gap:10px;background:var(--sunk);border-radius:12px;padding:12px}
+.libForm textarea{font:500 .8rem/1.5 var(--mono);background:var(--surface)}
+.libForm input{background:var(--surface)}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 </head>
@@ -136,6 +149,20 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
     </div>
   </section>
 
+  <div class="finder">
+    <label class="visually-hidden" for="snipSearch">Find saved code</label>
+    <input id="snipSearch" type="search" placeholder="Find saved code (e.g. hybrid, react, fastapi)" autocomplete="off">
+    <ul id="snipResults"></ul>
+  </div>
+  <section class="snip" id="snipCard" hidden aria-live="polite">
+    <div class="snip-head">
+      <span class="tag">Saved code</span>
+      <h2 id="snipTitle"></h2>
+      <button class="btn sm" id="snipCopy" type="button">Copy</button>
+      <button class="btn sm" id="snipClose" type="button">Close</button>
+    </div>
+    <pre><code id="snipCode"></code></pre>
+  </section>
   <button class="pending" id="pendingBar" type="button" hidden><b>New question</b><span id="pendingQ"></span><b>Tap to view</b></button>
   <article class="answer" id="answer" aria-live="polite">
     <div class="answer-head"><span class="label">Say this</span><span class="tag" id="exTag">Example</span></div>
@@ -263,12 +290,35 @@ Education: B.Tech, CMRIT, 2017.</textarea>
     </div>
   </details>
 
+  <details id="library">
+    <summary>Code library <span class="label" id="libCount"></span></summary>
+    <div class="panel">
+      <p class="small">Saved code pops up above the answer when a question matches its keywords. Matching happens on your phone, so it's instant.</p>
+      <ul class="libList" id="libList"></ul>
+      <div class="row">
+        <button class="btn primary" id="libAdd" type="button">Add snippet</button>
+        <label class="btn" for="libImport">Import .md</label>
+        <input type="file" id="libImport" accept=".md,.txt,text/markdown,text/plain" class="visually-hidden">
+        <button class="btn" id="libExport" type="button">Export .md</button>
+      </div>
+      <form class="libForm" id="libForm" hidden autocomplete="off">
+        <div class="field"><label class="label" for="libTitle">Title</label><input id="libTitle" required placeholder="e.g. Hybrid search (BM25 + vector)"></div>
+        <div class="field"><label class="label" for="libKeys">Keywords (comma separated)</label><input id="libKeys" placeholder="hybrid search, bm25, rrf"></div>
+        <div class="field"><label class="label" for="libLang">Language</label><input id="libLang" placeholder="python"></div>
+        <div class="field"><label class="label" for="libCode">Code</label><textarea id="libCode" rows="12" required spellcheck="false"></textarea></div>
+        <div class="row"><button class="btn primary" type="submit">Save snippet</button><button class="btn" type="button" id="libCancel">Cancel</button></div>
+      </form>
+      <p class="small" id="libStatus"></p>
+    </div>
+  </details>
+
   <details id="history">
     <summary>This session <span class="label" id="histCount">0</span></summary>
     <div class="panel"><ul class="hist" id="histList"></ul></div>
   </details>
 </div>
 
+<script type="application/json" id="starterSnips">[{"title": "Hybrid search (BM25 + vector, RRF)", "keys": "hybrid search, hybrid retrieval, bm25, keyword and vector, reciprocal rank fusion, rrf, rag retrieval", "lang": "python", "code": "# Hybrid search for RAG: BM25 keyword + dense vector, fused with Reciprocal Rank Fusion (RRF)\nimport numpy as np\nfrom rank_bm25 import BM25Okapi\nfrom sentence_transformers import SentenceTransformer\n\ndocs = [\"...chunk 1...\", \"...chunk 2...\"]          # your document chunks\nmodel = SentenceTransformer(\"all-MiniLM-L6-v2\")\ndoc_vecs = model.encode(docs, normalize_embeddings=True)\nbm25 = BM25Okapi([d.lower().split() for d in docs])\n\ndef hybrid_search(query: str, k: int = 5, rrf_k: int = 60):\n    # 1. Keyword ranking (exact terms, IDs, table names)\n    kw_rank = np.argsort(bm25.get_scores(query.lower().split()))[::-1]\n\n    # 2. Semantic ranking (cosine similarity; vectors are normalized)\n    q_vec = model.encode([query], normalize_embeddings=True)[0]\n    vec_rank = np.argsort(doc_vecs @ q_vec)[::-1]\n\n    # 3. Reciprocal Rank Fusion: reward docs ranked high in either list\n    fused = {}\n    for ranking in (kw_rank, vec_rank):\n        for pos, idx in enumerate(ranking[:50]):\n            fused[idx] = fused.get(idx, 0.0) + 1.0 / (rrf_k + pos + 1)\n\n    top = sorted(fused, key=fused.get, reverse=True)[:k]\n    return [(docs[i], round(fused[i], 4)) for i in top]\n\n# Next step in RAG: pass the top chunks to the LLM with\n# \"answer only from this context, cite sources, say 'I don't know' otherwise\"."}, {"title": "ReAct agent with LangGraph", "keys": "react agent, react pattern, reason and act, tool calling agent, langgraph agent, agent with tools, agentic", "lang": "python", "code": "# ReAct agent with LangGraph: Reason (LLM) -> Act (tool) -> Observe (result) -> repeat\nimport ast, operator as op, os\nfrom typing import Annotated, TypedDict\nfrom langchain_core.messages import HumanMessage\nfrom langchain_core.tools import tool\nfrom langchain_openai import ChatOpenAI\nfrom langgraph.graph import StateGraph, START\nfrom langgraph.graph.message import add_messages\nfrom langgraph.prebuilt import ToolNode, tools_condition\n\n@tool\ndef get_weather(city: str) -> str:\n    \"\"\"Return the current weather for a city.\"\"\"\n    return f\"It is 31\u00b0C and sunny in {city}.\"\n\n@tool\ndef calculator(expression: str) -> str:\n    \"\"\"Safely evaluate arithmetic like '2 * (3 + 4)'.\"\"\"\n    ops = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.USub: op.neg}\n    def ev(n):\n        if isinstance(n, ast.Constant): return n.value\n        if isinstance(n, ast.BinOp): return ops[type(n.op)](ev(n.left), ev(n.right))\n        if isinstance(n, ast.UnaryOp): return ops[type(n.op)](ev(n.operand))\n        raise ValueError(\"unsupported expression\")\n    return str(ev(ast.parse(expression, mode=\"eval\").body))\n\ntools = [get_weather, calculator]\nllm = ChatOpenAI(model=\"google/gemini-3.8-flash\", base_url=\"https://openrouter.ai/api/v1\",\n                 api_key=os.environ[\"OPENROUTER_API_KEY\"], temperature=0).bind_tools(tools)\n\nclass State(TypedDict):\n    messages: Annotated[list, add_messages]   # conversation + tool results\n\ndef agent(state: State):\n    # Reason: the LLM either answers or asks for a tool call\n    return {\"messages\": [llm.invoke(state[\"messages\"])]}\n\ngraph = StateGraph(State)\ngraph.add_node(\"agent\", agent)\ngraph.add_node(\"tools\", ToolNode(tools))                # Act: run the requested tool\ngraph.add_edge(START, \"agent\")\ngraph.add_conditional_edges(\"agent\", tools_condition)   # tool call -> \"tools\", else END\ngraph.add_edge(\"tools\", \"agent\")                        # Observe: result goes back to the LLM\napp = graph.compile()\n\nresult = app.invoke({\"messages\": [HumanMessage(\"Weather in Hyderabad, and what is 18*7?\")]},\n                    {\"recursion_limit\": 10})            # cap the loop\nprint(result[\"messages\"][-1].content)"}, {"title": "NL2SQL on Oracle with validation", "keys": "nl2sql, nl to sql, text to sql, natural language to sql, sql agent, sql generation", "lang": "python", "code": "# NL2SQL on Oracle with LangChain: schema grounding, SELECT-only validation, error-feedback retry\nimport os, re\nimport oracledb\nimport sqlglot\nfrom sqlglot import exp\nfrom langchain_openai import ChatOpenAI\n\nllm = ChatOpenAI(model=\"google/gemini-3.8-flash\", base_url=\"https://openrouter.ai/api/v1\",\n                 api_key=os.environ[\"OPENROUTER_API_KEY\"], temperature=0)\n\nSCHEMA = \"\"\"PROVIDER(PROVIDER_ID NUMBER, NAME VARCHAR2, SPECIALTY VARCHAR2, STATE CHAR(2))\nCLAIM(CLAIM_ID NUMBER, PROVIDER_ID NUMBER, AMOUNT NUMBER, CLAIM_DATE DATE)\"\"\"\nALLOWED_TABLES = {\"PROVIDER\", \"CLAIM\"}\n\nPROMPT = \"\"\"You write Oracle SQL. Use ONLY these tables and columns:\n{schema}\nRules: one SELECT statement only; use FETCH FIRST n ROWS ONLY for limits; return only SQL.\nQuestion: {question}\"\"\"\n\ndef generate_sql(question: str, error: str | None = None) -> str:\n    p = PROMPT.format(schema=SCHEMA, question=question)\n    if error:\n        p += f\"\\nYour previous query failed with: {error}\\nReturn a corrected query.\"\n    sql = llm.invoke(p).content.strip()\n    return re.sub(r\"^```\\w*|```$\", \"\", sql, flags=re.M).strip().rstrip(\";\")\n\ndef validate(sql: str) -> None:\n    tree = sqlglot.parse_one(sql, read=\"oracle\")          # raises on syntax errors\n    if not isinstance(tree, exp.Select):\n        raise ValueError(\"Only SELECT statements are allowed\")\n    used = {t.name.upper() for t in tree.find_all(exp.Table)}\n    if not used <= ALLOWED_TABLES:\n        raise ValueError(f\"Unknown tables: {used - ALLOWED_TABLES}\")\n\ndef ask(question: str, conn: oracledb.Connection, retries: int = 2):\n    error = None\n    for _ in range(retries + 1):\n        sql = generate_sql(question, error)\n        try:\n            validate(sql)\n            with conn.cursor() as cur:\n                cur.execute(sql)\n                cols = [d[0] for d in cur.description]\n                rows = cur.fetchmany(200)                 # cap result size\n            return sql, cols, rows\n        except Exception as e:\n            error = str(e)                                # feed the error back and retry\n    raise RuntimeError(f\"Could not produce a valid query: {error}\")\n\n# conn = oracledb.connect(user=\"readonly_user\", password=os.environ[\"DB_PW\"], dsn=\"host/service\")\n# conn.call_timeout = 10_000   # ms: stop long-running queries\n# print(ask(\"Top 5 providers by total claim amount in TX\", conn))"}, {"title": "FastAPI GenAI endpoint", "keys": "fastapi, genai api, llm api, pydantic, request validation, rest api", "lang": "python", "code": "# FastAPI GenAI endpoint: Pydantic validation, model allow-list, timeouts, safe error handling\nimport os\nimport httpx\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel, Field, field_validator\n\napp = FastAPI()\nALLOWED_MODELS = {\"google/gemini-3.8-flash\", \"openai/gpt-6-luna\"}\n\nclass AskRequest(BaseModel):\n    question: str = Field(min_length=3, max_length=2000)\n    model: str = \"google/gemini-3.8-flash\"\n    temperature: float = Field(0.2, ge=0, le=1)\n\n    @field_validator(\"model\")\n    @classmethod\n    def model_allowed(cls, v: str) -> str:\n        if v not in ALLOWED_MODELS:\n            raise ValueError(\"model not allowed\")\n        return v\n\nclass AskResponse(BaseModel):\n    answer: str\n    model: str\n\n@app.post(\"/ask\", response_model=AskResponse)\nasync def ask(req: AskRequest):\n    try:\n        async with httpx.AsyncClient(timeout=30) as client:\n            r = await client.post(\n                \"https://openrouter.ai/api/v1/chat/completions\",\n                headers={\"Authorization\": f\"Bearer {os.environ['OPENROUTER_API_KEY']}\"},  # key never in code\n                json={\"model\": req.model, \"temperature\": req.temperature,\n                      \"messages\": [{\"role\": \"system\", \"content\": \"Answer concisely.\"},\n                                   {\"role\": \"user\", \"content\": req.question}]},\n            )\n            r.raise_for_status()\n    except httpx.TimeoutException:\n        raise HTTPException(504, \"LLM provider timed out\")\n    except httpx.HTTPStatusError as e:\n        raise HTTPException(502, f\"LLM provider error {e.response.status_code}\")\n    answer = r.json()[\"choices\"][0][\"message\"][\"content\"]\n    return AskResponse(answer=answer, model=req.model)\n\n# Run: uvicorn main:app --reload   \u00b7   invalid input returns 422 automatically"}]</script>
 <script>
 (function(){
   const $=id=>document.getElementById(id);
@@ -403,7 +453,7 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
   $("pendingBar").onclick=()=>{
     if(!pending)return;const p=pending;pending=null;showPendingBar();
     for(const [k,c] of inflight){if(k<p.id){c.abort();inflight.delete(k)}}
-    shownId=p.id;shownReal=true;const qm=p.text.match(/^Q:\s*(.*)/im);render(p.text.replace(/^Q:.*$/im,""),qm?qm[1]:p.heard,false);
+    shownId=p.id;shownReal=true;$("snipCard").hidden=true;if(p.snip)showSnip(p.snip);const qm=p.text.match(/^Q:\s*(.*)/im);render(p.text.replace(/^Q:.*$/im,""),qm?qm[1]:p.heard,false);
     scrollTo({top:$("answer").offsetTop-12,behavior:"smooth"});
   };
   async function answer(heard,img,typed,explicit){
@@ -412,10 +462,10 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
     const id=++seq, ctl=new AbortController(); inflight.set(id,ctl);
     if(shownId===0||!inflight.has(shownId)){$("answer").classList.add("live")}
     $("micState").textContent=listening?"Thinking… (still listening)":"Thinking…";
-    let text="", took=false;
+    let text="", took=false, snip=!img&&heard?matchSnippet(heard):null, snipShown=false;
     const force=!!(img||typed||explicit);
-    const takeOver=()=>{took=true;shownId=id;shownReal=true;for(const [k,c] of inflight){if(k<id){c.abort();inflight.delete(k)}}if(pending&&pending.id<id){pending=null;showPendingBar()}$("answer").classList.add("live");showNote("")};
-    const queue=()=>{took=true;if(pending&&pending.id!==id){const c=inflight.get(pending.id);if(c){c.abort();inflight.delete(pending.id)}}pending={id,text:"",heard};showPendingBar()};
+    const takeOver=()=>{took=true;shownId=id;shownReal=true;for(const [k,c] of inflight){if(k<id){c.abort();inflight.delete(k)}}if(pending&&pending.id<id){pending=null;showPendingBar()}$("snipCard").hidden=true;$("answer").classList.add("live");showNote("")};
+    const queue=()=>{took=true;if(pending&&pending.id!==id){const c=inflight.get(pending.id);if(c){c.abort();inflight.delete(pending.id)}}pending={id,text:"",heard,snip};showPendingBar()};
     try{
       const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",signal:ctl.signal,
         headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
@@ -430,6 +480,8 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
             const clean=text.trim();
             if(/^SKIP/i.test(clean)){ctl.abort();break}
             if(!took&&clean.length>8){if(!force&&$("lockOn").checked&&shownReal)queue();else if(id>=shownId||force)takeOver()}
+            if(!snip&&!snipShown){const qm=clean.match(/^Q:\s*(.*)\n/im);if(qm){snip=matchSnippet(qm[1]);if(pending&&pending.id===id)pending.snip=snip}}
+            if(took&&shownId===id&&snip&&!snipShown){snipShown=true;showSnip(snip)}
             if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:(heard||"Screenshot"),false)}
             else if(pending&&pending.id===id){pending.text=clean;showPendingBar()}
           }}catch(e){}
@@ -474,7 +526,7 @@ ${raw.slice(0,20000)}`}]})});
       if(n.endsWith(".pdf")||f.type==="application/pdf")raw=await pdfText(f);
       else if(n.endsWith(".docx"))raw=await docxText(f);
       else if(n.endsWith(".doc")){st.textContent="Old .doc files aren't supported. Save it as .docx or PDF and try again.";return}
-      else raw=await f.text();
+      else raw=await readText(f);
       raw=raw.replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();
       if(raw.length<80){st.textContent="Couldn't find text in that file. If it's a scanned PDF, upload a Word or text version.";return}
       $("bg").value=raw;store.set("icl_bg",raw);
@@ -489,7 +541,62 @@ ${raw.slice(0,20000)}`}]})});
   // ---------- project details ----------
   function projCount(){const n=$("projects").value.length;$("projCount").textContent=n?n.toLocaleString()+" characters"+(n>8000?" · only the first 8,000 are used, trim it for faster answers":""):"";}
   $("projects").addEventListener("input",projCount);projCount();
-  $("projFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const t=(await f.text()).trim();$("projects").value=t;store.set("icl_projects",t);projCount();$("projStatus").textContent="Loaded "+f.name}catch(err){$("projStatus").textContent="Couldn't read that file."}finally{e.target.value=""}};
+  $("projFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const t=(await readText(f)).trim();$("projects").value=t;store.set("icl_projects",t);projCount();$("projStatus").textContent="Loaded "+f.name}catch(err){$("projStatus").textContent="Couldn't read that file."}finally{e.target.value=""}};
+
+  function readText(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsText(f)})}
+  // ---------- code library ----------
+  let snips;try{snips=JSON.parse(store.get("icl_snips")||"null")}catch(e){snips=null}
+  if(!Array.isArray(snips)){snips=JSON.parse($("starterSnips").textContent);}
+  function saveSnips(){store.set("icl_snips",JSON.stringify(snips));renderLib()}
+  const norm=s=>(" "+String(s).toLowerCase().replace(/[^a-z0-9+#]+/g," ").trim()+" ");
+  function matchSnippet(q){
+    const t=norm(q);let best=null,bs=0;
+    for(const s of snips){let sc=0;
+      for(const k of String(s.keys||"").split(",").map(k=>norm(k).trim()).filter(Boolean)){if(t.includes(" "+k+" "))sc+=k.includes(" ")?3:2}
+      for(const w of norm(s.title).trim().split(" "))if(w.length>3&&t.includes(" "+w+" "))sc+=1;
+      if(sc>bs){bs=sc;best=s}}
+    return bs>=3?best:null;
+  }
+  function showSnip(s){$("snipTitle").textContent=s.title+(s.lang?" · "+s.lang:"");$("snipCode").textContent=s.code;$("snipCard").hidden=false;$("snipCopy").textContent="Copy"}
+  $("snipClose").onclick=()=>{$("snipCard").hidden=true};
+  $("snipCopy").onclick=async()=>{try{await navigator.clipboard.writeText($("snipCode").textContent);$("snipCopy").textContent="Copied"}catch(e){const r=document.createRange();r.selectNodeContents($("snipCode"));const sel=getSelection();sel.removeAllRanges();sel.addRange(r)}};
+  $("snipSearch").addEventListener("input",()=>{
+    const q=$("snipSearch").value.trim().toLowerCase(),ul=$("snipResults");ul.replaceChildren();if(!q)return;
+    snips.filter(s=>(s.title+" "+s.keys+" "+s.lang).toLowerCase().includes(q)).slice(0,6).forEach(s=>{const li=document.createElement("li"),b=document.createElement("button");b.type="button";b.textContent=s.title;b.onclick=()=>{showSnip(s);$("snipSearch").value="";ul.replaceChildren();$("snipCard").scrollIntoView({behavior:"smooth",block:"start"})};li.append(b);ul.append(li)});
+    if(!ul.children.length){const li=document.createElement("li");li.className="small";li.textContent="No saved code matches.";ul.append(li)}
+  });
+  let editIdx=-1;
+  function openForm(i){editIdx=i;const s=i>=0?snips[i]:{title:"",keys:"",lang:"python",code:""};$("libTitle").value=s.title;$("libKeys").value=s.keys;$("libLang").value=s.lang;$("libCode").value=s.code;$("libForm").hidden=false;$("libTitle").focus()}
+  function renderLib(){
+    $("libCount").textContent=snips.length+(snips.length===1?" snippet":" snippets");
+    const ul=$("libList");ul.replaceChildren();
+    snips.forEach((s,i)=>{const li=document.createElement("li"),t=document.createElement("span");t.textContent=s.title;
+      const v=document.createElement("button");v.type="button";v.className="btn sm";v.textContent="View";v.onclick=()=>{showSnip(s);$("snipCard").scrollIntoView({behavior:"smooth"})};
+      const e=document.createElement("button");e.type="button";e.className="btn sm";e.textContent="Edit";e.onclick=()=>openForm(i);
+      const d=document.createElement("button");d.type="button";d.className="btn sm";d.textContent="Delete";let armed=0;
+      d.onclick=()=>{if(Date.now()-armed<3000){snips.splice(i,1);saveSnips();$("libStatus").textContent="Deleted "+s.title+"."}else{armed=Date.now();d.textContent="Tap again"}};
+      li.append(t,v,e,d);ul.append(li)});
+  }
+  $("libAdd").onclick=()=>openForm(-1);
+  $("libCancel").onclick=()=>{$("libForm").hidden=true};
+  $("libForm").addEventListener("submit",e=>{e.preventDefault();
+    const s={title:$("libTitle").value.trim(),keys:$("libKeys").value.trim(),lang:$("libLang").value.trim(),code:$("libCode").value.replace(/\s+$/,"")};
+    if(!s.title||!s.code)return;if(editIdx>=0)snips[editIdx]=s;else snips.push(s);
+    $("libForm").hidden=true;saveSnips();$("libStatus").textContent="Saved "+s.title+".";});
+  function toMd(){return snips.map(s=>"## "+s.title+"\nkeywords: "+(s.keys||"")+"\n\n```"+(s.lang||"")+"\n"+s.code+"\n```\n").join("\n")}
+  function fromMd(md){
+    const out=[];const parts=md.split(/^## +/m).slice(1);
+    for(const p of parts){const title=p.split("\n")[0].trim();const km=p.match(/^keywords:\s*(.*)$/im);const cm=p.match(/```([^\n]*)\n([\s\S]*?)\n```/);
+      if(title&&cm)out.push({title,keys:km?km[1].trim():"",lang:cm[1].trim(),code:cm[2]})}
+    return out;
+  }
+  $("libImport").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const add=fromMd(await readText(f));
+      if(!add.length){$("libStatus").textContent="No snippets found. Each needs a '## Title' line and a ``` code block.";return}
+      for(const a of add){const i=snips.findIndex(s=>s.title.toLowerCase()===a.title.toLowerCase());if(i>=0)snips[i]=a;else snips.push(a)}
+      saveSnips();$("libStatus").textContent="Imported "+add.length+" snippet"+(add.length>1?"s":"")+"."}
+    catch(err){$("libStatus").textContent="Couldn't read that file."}finally{e.target.value=""}};
+  $("libExport").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([toMd()],{type:"text/markdown"}));a.download="code-library.md";document.body.append(a);a.click();a.remove()};
+  renderLib();
 
   // ---------- typed question ----------
   $("typedForm").addEventListener("submit",e=>{e.preventDefault();const t=$("typedQ").value.trim();if(!t){$("typedQ").focus();return}answer(t,null,true);$("typedQ").value="";$("typedQ").blur()});
