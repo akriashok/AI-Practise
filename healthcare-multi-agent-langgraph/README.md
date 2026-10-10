@@ -12,6 +12,10 @@ answer before the user sees it.
 | **Data Visualization** | Charts each submitter's files: how many passed or failed validation and how many reached the core layer. Also shows a funnel, a monthly trend and status by file type (Plotly). |
 | **Reflection** | Checks the answer against the exact data the agent used (question fit, number accuracy, SQL logic, PHI exposure). If it rejects the answer, it sends it back to the same agent with fix instructions (up to 2 rounds). |
 
+**Front end:** Gradio. The page has a chat panel with example questions and, beside it, the answer's Plotly
+charts, generated SQL, result table and agent trace. There are also Architecture (LangGraph diagram) and Database
+(40-table row counts) tabs.
+
 ```
 START -> router -> {data_explorer | reporting | file_tracker | data_visualization} -> reflection
 reflection -> (approved or max rounds) END | (rejected) same specialist with feedback
@@ -35,7 +39,7 @@ python -m venv venv && venv\Scripts\activate      # Windows (source venv/bin/act
 pip install -r requirements.txt
 copy .env.example .env                              # then add your OPENROUTER_API_KEY
 python -m healthcare_agents.seed_data               # builds data/healthcare.db (also auto-built on first run)
-streamlit run app.py                                # http://localhost:8501
+python app.py                                       # Gradio UI at http://localhost:7860
 ```
 CLI: `python -m healthcare_agents.graph "Top 5 denial reasons by billed amount"`
 

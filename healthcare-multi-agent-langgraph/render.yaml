@@ -5,8 +5,8 @@ services:
     plan: free
     rootDir: healthcare-multi-agent-langgraph
     buildCommand: pip install -r requirements.txt && python -m healthcare_agents.seed_data
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
-    healthCheckPath: /_stcore/health
+    startCommand: python app.py
+    healthCheckPath: /
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
