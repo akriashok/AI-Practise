@@ -73,6 +73,8 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
 .small{font-size:.8rem;color:var(--muted);margin:0}
 .hist{list-style:none;margin:0;padding:0}
 .hist li{border-top:1px solid var(--line);padding:10px 0;cursor:pointer}
+.hist li.on .hq{color:var(--accent)}
+.hist .ht{font:500 .7rem/1 var(--mono);color:var(--muted);margin-right:6px}
 .hist .hq{font-weight:500}
 .hist .ha{font-size:.85rem;color:var(--muted)}
 .shot{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
@@ -86,9 +88,6 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
 .typed{display:flex;gap:8px;align-items:flex-end}
 .typed textarea{flex:1;min-width:0;resize:none}
 .typed .btn{padding:13px 18px}
-.pending{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;border-radius:12px;padding:12px 14px;background:var(--accent);color:var(--accent-ink);font:600 .92rem/1.35 var(--body);cursor:pointer}
-.pending span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.pending b{font:500 .7rem/1 var(--mono);text-transform:uppercase;letter-spacing:.08em;opacity:.85}
 .check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
 .check input{width:20px;height:20px;flex:none;margin-top:2px;accent-color:var(--accent)}
 .check span{display:flex;flex-direction:column;gap:2px}
@@ -163,12 +162,16 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
     </div>
     <pre><code id="snipCode"></code></pre>
   </section>
-  <button class="pending" id="pendingBar" type="button" hidden><b>New question</b><span id="pendingQ"></span><b>Tap to view</b></button>
   <article class="answer" id="answer" aria-live="polite">
     <div class="answer-head"><span class="label">Say this</span><span class="tag" id="exTag">Example</span></div>
     <p class="asked" id="asked"></p>
     <div id="out"></div>
   </article>
+
+  <details id="history" open>
+    <summary>Question log <span class="label" id="histCount">0</span></summary>
+    <div class="panel"><p class="small" id="histEmpty">Earlier questions appear here. Tap one to see its answer again.</p><ul class="hist" id="histList"></ul></div>
+  </details>
 
   <details id="setup">
     <summary>Setup <span class="label">key · profile · mic</span></summary>
@@ -226,10 +229,6 @@ textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-
         <input id="shotModel" value="anthropic/claude-sonnet-5.5" placeholder="provider/model-id for screenshots" hidden>
         <p class="small">Used only for screenshot questions, so voice answers stay fast.</p>
       </div>
-      <label class="check" for="lockOn">
-        <input type="checkbox" id="lockOn" checked>
-        <span><strong>Answer lock</strong><span class="small">Keep the answer you're reading on screen. New spoken questions wait behind a "New question" bar.</span></span>
-      </label>
       <div class="two">
         <div class="field">
           <label class="label" for="lang">Accent</label>
@@ -312,10 +311,6 @@ Education: B.Tech, CMRIT, 2017.</textarea>
     </div>
   </details>
 
-  <details id="history">
-    <summary>This session <span class="label" id="histCount">0</span></summary>
-    <div class="panel"><ul class="hist" id="histList"></ul></div>
-  </details>
 </div>
 
 <script type="application/json" id="starterSnips">[{"title": "Hybrid search (BM25 + vector, RRF)", "keys": "hybrid search, hybrid retrieval, bm25, keyword and vector, reciprocal rank fusion, rrf, rag retrieval", "lang": "python", "code": "# Hybrid search for RAG: BM25 keyword + dense vector, fused with Reciprocal Rank Fusion (RRF)\nimport numpy as np\nfrom rank_bm25 import BM25Okapi\nfrom sentence_transformers import SentenceTransformer\n\ndocs = [\"...chunk 1...\", \"...chunk 2...\"]          # your document chunks\nmodel = SentenceTransformer(\"all-MiniLM-L6-v2\")\ndoc_vecs = model.encode(docs, normalize_embeddings=True)\nbm25 = BM25Okapi([d.lower().split() for d in docs])\n\ndef hybrid_search(query: str, k: int = 5, rrf_k: int = 60):\n    # 1. Keyword ranking (exact terms, IDs, table names)\n    kw_rank = np.argsort(bm25.get_scores(query.lower().split()))[::-1]\n\n    # 2. Semantic ranking (cosine similarity; vectors are normalized)\n    q_vec = model.encode([query], normalize_embeddings=True)[0]\n    vec_rank = np.argsort(doc_vecs @ q_vec)[::-1]\n\n    # 3. Reciprocal Rank Fusion: reward docs ranked high in either list\n    fused = {}\n    for ranking in (kw_rank, vec_rank):\n        for pos, idx in enumerate(ranking[:50]):\n            fused[idx] = fused.get(idx, 0.0) + 1.0 / (rrf_k + pos + 1)\n\n    top = sorted(fused, key=fused.get, reverse=True)[:k]\n    return [(docs[i], round(fused[i], 4)) for i in top]\n\n# Next step in RAG: pass the top chunks to the LLM with\n# \"answer only from this context, cite sources, say 'I don't know' otherwise\"."}, {"title": "ReAct agent with LangGraph", "keys": "react agent, react pattern, reason and act, tool calling agent, langgraph agent, agent with tools, agentic", "lang": "python", "code": "# ReAct agent with LangGraph: Reason (LLM) -> Act (tool) -> Observe (result) -> repeat\nimport ast, operator as op, os\nfrom typing import Annotated, TypedDict\nfrom langchain_core.messages import HumanMessage\nfrom langchain_core.tools import tool\nfrom langchain_openai import ChatOpenAI\nfrom langgraph.graph import StateGraph, START\nfrom langgraph.graph.message import add_messages\nfrom langgraph.prebuilt import ToolNode, tools_condition\n\n@tool\ndef get_weather(city: str) -> str:\n    \"\"\"Return the current weather for a city.\"\"\"\n    return f\"It is 31\u00b0C and sunny in {city}.\"\n\n@tool\ndef calculator(expression: str) -> str:\n    \"\"\"Safely evaluate arithmetic like '2 * (3 + 4)'.\"\"\"\n    ops = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.USub: op.neg}\n    def ev(n):\n        if isinstance(n, ast.Constant): return n.value\n        if isinstance(n, ast.BinOp): return ops[type(n.op)](ev(n.left), ev(n.right))\n        if isinstance(n, ast.UnaryOp): return ops[type(n.op)](ev(n.operand))\n        raise ValueError(\"unsupported expression\")\n    return str(ev(ast.parse(expression, mode=\"eval\").body))\n\ntools = [get_weather, calculator]\nllm = ChatOpenAI(model=\"google/gemini-3.8-flash\", base_url=\"https://openrouter.ai/api/v1\",\n                 api_key=os.environ[\"OPENROUTER_API_KEY\"], temperature=0).bind_tools(tools)\n\nclass State(TypedDict):\n    messages: Annotated[list, add_messages]   # conversation + tool results\n\ndef agent(state: State):\n    # Reason: the LLM either answers or asks for a tool call\n    return {\"messages\": [llm.invoke(state[\"messages\"])]}\n\ngraph = StateGraph(State)\ngraph.add_node(\"agent\", agent)\ngraph.add_node(\"tools\", ToolNode(tools))                # Act: run the requested tool\ngraph.add_edge(START, \"agent\")\ngraph.add_conditional_edges(\"agent\", tools_condition)   # tool call -> \"tools\", else END\ngraph.add_edge(\"tools\", \"agent\")                        # Observe: result goes back to the LLM\napp = graph.compile()\n\nresult = app.invoke({\"messages\": [HumanMessage(\"Weather in Hyderabad, and what is 18*7?\")]},\n                    {\"recursion_limit\": 10})            # cap the loop\nprint(result[\"messages\"][-1].content)"}, {"title": "NL2SQL on Oracle with validation", "keys": "nl2sql, nl to sql, text to sql, natural language to sql, sql agent, sql generation", "lang": "python", "code": "# NL2SQL on Oracle with LangChain: schema grounding, SELECT-only validation, error-feedback retry\nimport os, re\nimport oracledb\nimport sqlglot\nfrom sqlglot import exp\nfrom langchain_openai import ChatOpenAI\n\nllm = ChatOpenAI(model=\"google/gemini-3.8-flash\", base_url=\"https://openrouter.ai/api/v1\",\n                 api_key=os.environ[\"OPENROUTER_API_KEY\"], temperature=0)\n\nSCHEMA = \"\"\"PROVIDER(PROVIDER_ID NUMBER, NAME VARCHAR2, SPECIALTY VARCHAR2, STATE CHAR(2))\nCLAIM(CLAIM_ID NUMBER, PROVIDER_ID NUMBER, AMOUNT NUMBER, CLAIM_DATE DATE)\"\"\"\nALLOWED_TABLES = {\"PROVIDER\", \"CLAIM\"}\n\nPROMPT = \"\"\"You write Oracle SQL. Use ONLY these tables and columns:\n{schema}\nRules: one SELECT statement only; use FETCH FIRST n ROWS ONLY for limits; return only SQL.\nQuestion: {question}\"\"\"\n\ndef generate_sql(question: str, error: str | None = None) -> str:\n    p = PROMPT.format(schema=SCHEMA, question=question)\n    if error:\n        p += f\"\\nYour previous query failed with: {error}\\nReturn a corrected query.\"\n    sql = llm.invoke(p).content.strip()\n    return re.sub(r\"^```\\w*|```$\", \"\", sql, flags=re.M).strip().rstrip(\";\")\n\ndef validate(sql: str) -> None:\n    tree = sqlglot.parse_one(sql, read=\"oracle\")          # raises on syntax errors\n    if not isinstance(tree, exp.Select):\n        raise ValueError(\"Only SELECT statements are allowed\")\n    used = {t.name.upper() for t in tree.find_all(exp.Table)}\n    if not used <= ALLOWED_TABLES:\n        raise ValueError(f\"Unknown tables: {used - ALLOWED_TABLES}\")\n\ndef ask(question: str, conn: oracledb.Connection, retries: int = 2):\n    error = None\n    for _ in range(retries + 1):\n        sql = generate_sql(question, error)\n        try:\n            validate(sql)\n            with conn.cursor() as cur:\n                cur.execute(sql)\n                cols = [d[0] for d in cur.description]\n                rows = cur.fetchmany(200)                 # cap result size\n            return sql, cols, rows\n        except Exception as e:\n            error = str(e)                                # feed the error back and retry\n    raise RuntimeError(f\"Could not produce a valid query: {error}\")\n\n# conn = oracledb.connect(user=\"readonly_user\", password=os.environ[\"DB_PW\"], dsn=\"host/service\")\n# conn.call_timeout = 10_000   # ms: stop long-running queries\n# print(ask(\"Top 5 providers by total claim amount in TX\", conn))"}, {"title": "FastAPI GenAI endpoint", "keys": "fastapi, genai api, llm api, pydantic, request validation, rest api", "lang": "python", "code": "# FastAPI GenAI endpoint: Pydantic validation, model allow-list, timeouts, safe error handling\nimport os\nimport httpx\nfrom fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel, Field, field_validator\n\napp = FastAPI()\nALLOWED_MODELS = {\"google/gemini-3.8-flash\", \"openai/gpt-6-luna\"}\n\nclass AskRequest(BaseModel):\n    question: str = Field(min_length=3, max_length=2000)\n    model: str = \"google/gemini-3.8-flash\"\n    temperature: float = Field(0.2, ge=0, le=1)\n\n    @field_validator(\"model\")\n    @classmethod\n    def model_allowed(cls, v: str) -> str:\n        if v not in ALLOWED_MODELS:\n            raise ValueError(\"model not allowed\")\n        return v\n\nclass AskResponse(BaseModel):\n    answer: str\n    model: str\n\n@app.post(\"/ask\", response_model=AskResponse)\nasync def ask(req: AskRequest):\n    try:\n        async with httpx.AsyncClient(timeout=30) as client:\n            r = await client.post(\n                \"https://openrouter.ai/api/v1/chat/completions\",\n                headers={\"Authorization\": f\"Bearer {os.environ['OPENROUTER_API_KEY']}\"},  # key never in code\n                json={\"model\": req.model, \"temperature\": req.temperature,\n                      \"messages\": [{\"role\": \"system\", \"content\": \"Answer concisely.\"},\n                                   {\"role\": \"user\", \"content\": req.question}]},\n            )\n            r.raise_for_status()\n    except httpx.TimeoutException:\n        raise HTTPException(504, \"LLM provider timed out\")\n    except httpx.HTTPStatusError as e:\n        raise HTTPException(502, f\"LLM provider error {e.response.status_code}\")\n    answer = r.json()[\"choices\"][0][\"message\"][\"content\"]\n    return AskResponse(answer=answer, model=req.model)\n\n# Run: uvicorn main:app --reload   \u00b7   invalid input returns 422 automatically"}]</script>
@@ -334,7 +329,6 @@ Education: B.Tech, CMRIT, 2017.</textarea>
     pick.addEventListener("change",()=>{if(pick.value==="custom"){box.hidden=false;box.focus()}else{box.value=pick.value;box.hidden=true;store.set("icl_"+boxId,box.value);syncLabel()}});
   }
   picker("modelPick","model");picker("shotModelPick","shotModel");
-  { const v=store.get("icl_lockOn"); if(v!==null)$("lockOn").checked=v==="1"; $("lockOn").addEventListener("change",()=>store.set("icl_lockOn",$("lockOn").checked?"1":"0")); }
   function shotModelId(){const v=$("shotModel").value.trim();return !v||v==="same"?$("model").value.trim():v}
   function syncLabel(){$("modelLabel").textContent=($("model").value.split("/")[1]||"").slice(0,22)}
   syncLabel();
@@ -375,7 +369,11 @@ FOLLOWUP: How did you evaluate whether the answers were accurate?`,"Walk me thro
 
   function renderHistory(){
     const ul=$("histList");ul.replaceChildren();$("histCount").textContent=history.length;
-    history.slice().reverse().forEach(h=>{const li=document.createElement("li");const a=document.createElement("div");a.className="hq";a.textContent=h.q;const b=document.createElement("div");b.className="ha";b.textContent=(h.a.match(/OPEN:\s*(.*)/i)||[,""])[1];li.append(a,b);li.onclick=()=>{render(h.a,h.q,false);scrollTo({top:0,behavior:"smooth"})};ul.append(li)});
+    $("histEmpty").hidden=history.length>0;
+    history.slice().sort((x,y)=>(y.id||0)-(x.id||0)).forEach(h=>{const li=document.createElement("li");if(h.id===shownId)li.className="on";
+      const a=document.createElement("div");a.className="hq";const t=document.createElement("span");t.className="ht";t.textContent=h.time||"";a.append(t,document.createTextNode(h.q));
+      const b=document.createElement("div");b.className="ha";b.textContent=(h.a.match(/OPEN:\s*(.*)/i)||[,""])[1];li.append(a,b);
+      li.onclick=()=>{render(h.a,h.q,false);$("snipCard").hidden=true;if(h.snip)showSnip(h.snip);$("answer").scrollIntoView({behavior:"smooth",block:"start"})};ul.append(li)});
   }
 
   // ---------- LLM (OpenRouter, streaming) ----------
@@ -448,14 +446,6 @@ Leave out the CODE section entirely if the question needs no code.
 Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$("bg").value.trim().slice(0,1500)}${$("projects").value.trim()?"; projects: "+$("projects").value.trim().slice(0,2500):""}`;
   }
 
-  let shownReal=false, pending=null;
-  function showPendingBar(){const b=$("pendingBar");if(!pending){b.hidden=true;return}const qm=pending.text.match(/^Q:\s*(.*)/im);$("pendingQ").textContent=qm?qm[1]:pending.heard;b.hidden=false}
-  $("pendingBar").onclick=()=>{
-    if(!pending)return;const p=pending;pending=null;showPendingBar();
-    for(const [k,c] of inflight){if(k<p.id){c.abort();inflight.delete(k)}}
-    shownId=p.id;shownReal=true;$("snipCard").hidden=true;if(p.snip)showSnip(p.snip);const qm=p.text.match(/^Q:\s*(.*)/im);render(p.text.replace(/^Q:.*$/im,""),qm?qm[1]:p.heard,false);
-    scrollTo({top:$("answer").offsetTop-12,behavior:"smooth"});
-  };
   async function answer(heard,img,typed,explicit){
     const key=$("key").value.trim();
     if(!key){showNote("Add your OpenRouter API key in Setup first.");$("setup").open=true;return}
@@ -464,8 +454,7 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
     $("micState").textContent=listening?"Thinking… (still listening)":"Thinking…";
     let text="", took=false, snip=!img&&heard?matchSnippet(heard):null, snipShown=false;
     const force=!!(img||typed||explicit);
-    const takeOver=()=>{took=true;shownId=id;shownReal=true;for(const [k,c] of inflight){if(k<id){c.abort();inflight.delete(k)}}if(pending&&pending.id<id){pending=null;showPendingBar()}$("snipCard").hidden=true;$("answer").classList.add("live");showNote("")};
-    const queue=()=>{took=true;if(pending&&pending.id!==id){const c=inflight.get(pending.id);if(c){c.abort();inflight.delete(pending.id)}}pending={id,text:"",heard,snip};showPendingBar()};
+    const takeOver=()=>{took=true;shownId=id;$("snipCard").hidden=true;$("answer").classList.add("live");showNote("")};
     try{
       const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",signal:ctl.signal,
         headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json","X-Title":"Interview Copilot"},
@@ -479,15 +468,14 @@ Candidate context: role ${$("role").value.trim()||"not given"}; background: ${$(
           try{const j=JSON.parse(d);const t=j.choices?.[0]?.delta?.content;if(t){text+=t;
             const clean=text.trim();
             if(/^SKIP/i.test(clean)){ctl.abort();break}
-            if(!took&&clean.length>8){if(!force&&$("lockOn").checked&&shownReal)queue();else if(id>=shownId||force)takeOver()}
-            if(!snip&&!snipShown){const qm=clean.match(/^Q:\s*(.*)\n/im);if(qm){snip=matchSnippet(qm[1]);if(pending&&pending.id===id)pending.snip=snip}}
+            if(!took&&clean.length>8&&(id>=shownId||force))takeOver();
+            if(!snip&&!snipShown){const qm=clean.match(/^Q:\s*(.*)\n/im);if(qm)snip=matchSnippet(qm[1])}
             if(took&&shownId===id&&snip&&!snipShown){snipShown=true;showSnip(snip)}
             if(took&&shownId===id){const qm=clean.match(/^Q:\s*(.*)/im);render(clean.replace(/^Q:.*$/im,""),qm?qm[1]:(heard||"Screenshot"),false)}
-            else if(pending&&pending.id===id){pending.text=clean;showPendingBar()}
           }}catch(e){}
         }
       }
-      if(took&&(shownId===id||(pending&&pending.id===id))){const qm=text.match(/^Q:\s*(.*)/im);history.push({q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
+      if(text.trim().length>8&&!/^SKIP/i.test(text.trim())){const qm=text.match(/^Q:\s*(.*)/im);history.push({id,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),snip,q:qm?qm[1].trim():(heard||"Screenshot"),a:text.replace(/^Q:.*$/im,"").trim()});if(history.length>40)history.shift();renderHistory()}
     }catch(e){
       if(e.name!=="AbortError"){showNote(e.message||"Couldn't reach OpenRouter. Check your connection.")}
     }finally{
