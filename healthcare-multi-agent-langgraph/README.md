@@ -99,6 +99,36 @@ Open **http://localhost:7860**. Startup takes about 10–20 seconds; wait for `R
 - **Answers are slow:** this is expected. Each question makes several LLM calls (router, agent, reflection) and
   takes about 15–60 seconds, longer when the Reflection agent asks for a correction.
 
+## Run with Docker
+Requires Docker (Docker Desktop on Windows/macOS). The image builds the SQLite database at build time and runs
+as a non-root user on port 7860.
+
+### Docker Compose (recommended)
+```powershell
+cd AI-Practise\healthcare-multi-agent-langgraph
+copy .env.example .env               # macOS/Linux: cp .env.example .env  (then set OPENROUTER_API_KEY)
+docker compose up --build -d
+```
+Open **http://localhost:7860**. Logs: `docker compose logs -f`. Stop: `docker compose down`.
+Compose reads `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `MAX_REFLECTIONS` and `PORT`
+(host port) from `.env`.
+
+### Plain Docker
+```powershell
+docker build -t healthcare-multi-agent .
+docker run -d --name healthcare-multi-agent -p 7860:7860 --env-file .env healthcare-multi-agent
+```
+
+### Prebuilt image (GitHub Container Registry)
+The workflow `.github/workflows/docker-healthcare-agents.yml` builds the image on every pull request and, on pushes
+to the default branch (and `v*` tags), publishes it to `ghcr.io/akriashok/healthcare-multi-agent`.
+```powershell
+docker pull ghcr.io/akriashok/healthcare-multi-agent:latest
+docker run -d -p 7860:7860 --env-file .env ghcr.io/akriashok/healthcare-multi-agent:latest
+```
+The package is private by default; make it public under GitHub → Packages → healthcare-multi-agent →
+Package settings if you want to pull it without `docker login ghcr.io`.
+
 ## Deploy on Render
 1. On Render, choose **New → Blueprint**, select the `AI-Practise` repo and set the **Blueprint path** to
    `healthcare-multi-agent-langgraph/render.yaml` (the service uses `rootDir: healthcare-multi-agent-langgraph`).
