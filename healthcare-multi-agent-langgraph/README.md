@@ -100,6 +100,8 @@ Open **http://localhost:7860**. Startup takes about 10–20 seconds; wait for `R
   takes about 15–60 seconds, longer when the Reflection agent asks for a correction.
 
 ## Run with Docker
+For the full step-by-step guide (install, run, publish to GHCR, deploy, troubleshoot) see **[DOCKER.md](DOCKER.md)**.
+
 Requires Docker (Docker Desktop on Windows/macOS). The image builds the SQLite database at build time and runs
 as a non-root user on port 7860.
 
