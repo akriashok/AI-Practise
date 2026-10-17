@@ -1,0 +1,13 @@
+services:
+  healthcare-agents:
+    build: .
+    image: ghcr.io/akriashok/healthcare-multi-agent:latest
+    container_name: healthcare-multi-agent
+    ports:
+      - "${PORT:-7860}:7860"
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      MAX_REFLECTIONS: ${MAX_REFLECTIONS:-2}
+    restart: unless-stopped
